@@ -16,18 +16,49 @@ import {
   Flame,
   Clock,
   ArrowRight,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import type { PantryItem, ShoppingItem, Recipe } from './types';
+import type { PantryItem, ShoppingItem, Recipe, Category } from './types';
 import { INITIAL_RECIPES, guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
 import { parseReceiptText, convertToPantryItem, type ParsedTicketItem } from './receiptParser';
 
 const STORAGE_KEY_PANTRY = 'estudiante_app_pantry';
 const STORAGE_KEY_SHOPPING = 'estudiante_app_shopping';
+const STORAGE_KEY_RECIPES = 'estudiante_app_recipes';
+
+const CATEGORIES: { id: Category | 'todos'; label: string; emoji: string }[] = [
+  { id: 'todos', label: 'Todos', emoji: '✨' },
+  { id: 'carne-pescado', label: 'Carne / Pescado', emoji: '🥩' },
+  { id: 'fruta-verdura', label: 'Fruta / Verdura', emoji: '🍎' },
+  { id: 'lacteos', label: 'Lácteos / Huevos', emoji: '🧀' },
+  { id: 'despensa', label: 'Despensa / Pasta', emoji: '🥫' },
+  { id: 'bebidas', label: 'Bebidas', emoji: '🧃' },
+  { id: 'congelados', label: 'Congelados', emoji: '🧊' },
+];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'frigo' | 'compra' | 'recetas' | 'ticket'>('frigo');
+
+  // Filter states
+  const [pantryFilter, setPantryFilter] = useState<Category | 'todos'>('todos');
+  const [recipeFilter, setRecipeFilter] = useState<Category | 'todos'>('todos');
+
+  // Modal create recipe state
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const [newRecipeTitle, setNewRecipeTitle] = useState('');
+  const [newRecipeDesc, setNewRecipeDesc] = useState('');
+  const [newRecipeTime, setNewRecipeTime] = useState(15);
+  const [newRecipeDifficulty, setNewRecipeDifficulty] = useState<'fácil' | 'medio' | 'difícil'>('fácil');
+  const [newRecipeIngredients, setNewRecipeIngredients] = useState<string>(''); // multiline name, qty, unit
+
+  // Helper date offset
+  const getOffsetDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  };
 
   // Calculate days remaining until expiry
   const getDaysRemaining = (expiryDate?: string): number | null => {
@@ -40,14 +71,7 @@ export default function App() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // Helper date offset
-  const getOffsetDate = (days: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    return d.toISOString().split('T')[0];
-  };
-
-  // State: Pantry with prices & expiry dates
+  // State: Pantry with localStorage persistence
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_PANTRY);
     if (saved) {
@@ -63,7 +87,7 @@ export default function App() {
     ];
   });
 
-  // State: Shopping List
+  // State: Shopping List with localStorage persistence
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_SHOPPING);
     if (saved) {
@@ -76,8 +100,14 @@ export default function App() {
     ];
   });
 
-  // State: Recipes
-  const [recipes] = useState<Recipe[]>(INITIAL_RECIPES);
+  // State: Custom Recipes with localStorage persistence
+  const [recipes, setRecipes] = useState<Recipe[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_RECIPES);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return INITIAL_RECIPES;
+  });
 
   // Inputs for quick additions
   const [quickShoppingName, setQuickShoppingName] = useState('');
@@ -85,6 +115,7 @@ export default function App() {
   
   const [quickPantryName, setQuickPantryName] = useState('');
   const [quickPantryQty, setQuickPantryQty] = useState(1);
+  const [quickPantryCategory, setQuickPantryCategory] = useState<Category>('otros');
   const [quickPantryPrice, setQuickPantryPrice] = useState<string>('');
   const [quickPantryExpiry, setQuickPantryExpiry] = useState<string>('');
 
@@ -100,6 +131,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_SHOPPING, JSON.stringify(shoppingList));
   }, [shoppingList]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_RECIPES, JSON.stringify(recipes));
+  }, [recipes]);
 
   // Handle Quick Add to Shopping List
   const handleAddShoppingItem = (e: React.FormEvent) => {
@@ -157,12 +192,13 @@ export default function App() {
     if (!quickPantryName.trim()) return;
 
     const price = quickPantryPrice ? parseFloat(quickPantryPrice.replace(',', '.')) : undefined;
+    const cat = quickPantryCategory === 'otros' ? guessCategory(quickPantryName) : quickPantryCategory;
     const expiry = quickPantryExpiry || getDefaultExpiryDate(quickPantryName);
 
     const newItem: PantryItem = {
       id: 'pantry_' + Date.now(),
       name: quickPantryName.trim(),
-      category: guessCategory(quickPantryName),
+      category: cat,
       quantity: Number(quickPantryQty) || 1,
       unit: guessUnit(quickPantryName),
       price: isNaN(price || 0) ? undefined : price,
@@ -177,7 +213,7 @@ export default function App() {
     setQuickPantryExpiry('');
   };
 
-  // Update Pantry Item Quantity (Gastar o Añadir)
+  // Update Pantry Item Quantity
   const updatePantryQuantity = (id: string, delta: number) => {
     setPantry(prev =>
       prev
@@ -195,6 +231,50 @@ export default function App() {
   // Remove Pantry Item
   const removePantryItem = (id: string) => {
     setPantry(prev => prev.filter(item => item.id !== id));
+  };
+
+  // Remove Custom Recipe
+  const removeRecipe = (id: string) => {
+    if (window.confirm('¿Quieres eliminar esta receta?')) {
+      setRecipes(prev => prev.filter(r => r.id !== id));
+    }
+  };
+
+  // Add Custom User Recipe
+  const handleCreateRecipe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRecipeTitle.trim() || !newRecipeIngredients.trim()) return;
+
+    // Parse ingredients from multiline input:
+    // e.g. "Huevos, 2, uds" or just "Huevos" or "Pollo, 200, g"
+    const parsedIngredients = newRecipeIngredients
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        const parts = line.split(',').map(p => p.trim());
+        const name = parts[0];
+        const qty = parts[1] ? parseFloat(parts[1]) || 1 : 1;
+        const unit = parts[2] || guessUnit(name);
+        return { name, quantity: qty, unit };
+      });
+
+    const newRecipe: Recipe = {
+      id: 'rec_' + Date.now(),
+      title: newRecipeTitle.trim(),
+      description: newRecipeDesc.trim() || 'Receta propia añadida por ti.',
+      cookingTimeMinutes: Number(newRecipeTime) || 15,
+      difficulty: newRecipeDifficulty,
+      ingredients: parsedIngredients,
+      steps: ['Preparar y mezclar los ingredientes según tu gusto.'],
+    };
+
+    setRecipes([newRecipe, ...recipes]);
+    setShowRecipeModal(false);
+    setNewRecipeTitle('');
+    setNewRecipeDesc('');
+    setNewRecipeIngredients('');
+    confetti({ particleCount: 60, spread: 70 });
   };
 
   // Process Mock / Demo Ticket
@@ -218,7 +298,6 @@ TOTAL 12.45 €`;
       const reader = new FileReader();
       reader.onloadend = () => {
         setTicketImagePreview(reader.result as string);
-        // Automatically simulate OCR reading for demo
         handleLoadDemoTicket();
       };
       reader.readAsDataURL(file);
@@ -232,7 +311,6 @@ TOTAL 12.45 €`;
     const newItems = previewItems.map(item => convertToPantryItem(item));
     setPantry(prev => [...newItems, ...prev]);
 
-    // Also auto-remove from shopping list if they were bought
     setShoppingList(prev =>
       prev.filter(shopItem => {
         const foundInTicket = previewItems.some(
@@ -253,7 +331,6 @@ TOTAL 12.45 €`;
   const handleCookRecipe = (recipe: Recipe) => {
     let missing: string[] = [];
 
-    // Check availability
     recipe.ingredients.forEach(req => {
       const match = pantry.find(p => p.name.toLowerCase().includes(req.name.toLowerCase()) || req.name.toLowerCase().includes(p.name.toLowerCase()));
       if (!match || match.quantity < req.quantity) {
@@ -305,7 +382,6 @@ TOTAL 12.45 €`;
     });
 
     const percentage = Math.round((availableCount / recipe.ingredients.length) * 100);
-    // Score based on completion + boost if has expiring ingredients
     const urgencyScore = (urgentIngredients.length * 30) + percentage;
 
     return {
@@ -317,12 +393,27 @@ TOTAL 12.45 €`;
     };
   };
 
-  // Sorted recipes: prioritize recipes that use items expiring soonest!
-  const sortedRecipes = [...recipes].sort((a, b) => {
-    const evalA = evaluateRecipe(a);
-    const evalB = evaluateRecipe(b);
-    return evalB.urgencyScore - evalA.urgencyScore;
-  });
+  // Filter and sort pantry
+  const filteredPantry = pantry
+    .filter(item => pantryFilter === 'todos' || item.category === pantryFilter)
+    .sort((a, b) => {
+      const daysA = getDaysRemaining(a.expiryDate) ?? 999;
+      const daysB = getDaysRemaining(b.expiryDate) ?? 999;
+      return daysA - daysB;
+    });
+
+  // Filter and sort recipes
+  const filteredRecipes = recipes
+    .filter(recipe => {
+      if (recipeFilter === 'todos') return true;
+      // Check if recipe has any ingredient of the selected category
+      return recipe.ingredients.some(ing => guessCategory(ing.name) === recipeFilter);
+    })
+    .sort((a, b) => {
+      const evalA = evaluateRecipe(a);
+      const evalB = evaluateRecipe(b);
+      return evalB.urgencyScore - evalA.urgencyScore;
+    });
 
   // Calculate totals
   const totalPantryValue = pantry.reduce((sum, item) => sum + (item.price || 0), 0);
@@ -343,7 +434,7 @@ TOTAL 12.45 €`;
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
               <span>🍳</span> NeveraEstudiante
             </h1>
-            <p className="text-xs text-emerald-100">Control de caducidades, tickets y comidas</p>
+            <p className="text-xs text-emerald-100">Control de frigo, compras y recetas</p>
           </div>
           <div className="text-right">
             <span className="text-xs bg-emerald-500/40 border border-emerald-400/50 px-2.5 py-1 rounded-full font-medium inline-block">
@@ -379,7 +470,7 @@ TOTAL 12.45 €`;
         {/* TAB 1: FRIGO / DESPENSA */}
         {activeTab === 'frigo' && (
           <div className="space-y-4">
-            {/* Quick Add Form with Price & Expiry */}
+            {/* Quick Add Form with Category, Price & Expiry */}
             <form onSubmit={handleAddPantryItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200 space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                 Añadir al frigorífico
@@ -389,7 +480,12 @@ TOTAL 12.45 €`;
                   type="text"
                   placeholder="Producto (ej: Leche, Huevos...)"
                   value={quickPantryName}
-                  onChange={e => setQuickPantryName(e.target.value)}
+                  onChange={e => {
+                    setQuickPantryName(e.target.value);
+                    if (e.target.value.length > 2) {
+                      setQuickPantryCategory(guessCategory(e.target.value));
+                    }
+                  }}
                   className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <input
@@ -402,150 +498,178 @@ TOTAL 12.45 €`;
                 />
               </div>
 
-              {/* Price and Expiry row */}
-              <div className="flex gap-2 items-center pt-1">
-                <div className="relative flex-1">
-                  <span className="absolute left-2.5 top-2.5 text-xs text-slate-400">€</span>
+              {/* Category selector + Price + Expiry */}
+              <div className="grid grid-cols-3 gap-2 pt-1 text-xs">
+                <select
+                  value={quickPantryCategory}
+                  onChange={e => setQuickPantryCategory(e.target.value as Category)}
+                  className="bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="lacteos">🧀 Lácteos</option>
+                  <option value="carne-pescado">🥩 Carne/Pescado</option>
+                  <option value="fruta-verdura">🍎 Fruta/Verdura</option>
+                  <option value="despensa">🥫 Despensa</option>
+                  <option value="bebidas">🧃 Bebidas</option>
+                  <option value="congelados">🧊 Congelados</option>
+                  <option value="otros">🍽️ Otros</option>
+                </select>
+
+                <div className="relative">
+                  <span className="absolute left-2.5 top-2 text-slate-400">€</span>
                   <input
                     type="text"
-                    placeholder="Precio (opcional)"
+                    placeholder="Precio"
                     value={quickPantryPrice}
                     onChange={e => setQuickPantryPrice(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
-                <div className="relative flex-1">
+
+                <div className="flex gap-1.5">
                   <input
                     type="date"
                     value={quickPantryExpiry}
                     onChange={e => setQuickPantryExpiry(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-1.5 py-1.5 text-[11px] text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     title="Fecha de caducidad"
                   />
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
               </div>
             </form>
+
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setPantryFilter(cat.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition flex items-center gap-1 ${
+                    pantryFilter === cat.id
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{cat.emoji}</span>
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
 
             {/* Pantry List */}
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-sm font-semibold text-slate-700">Tus alimentos guardados</h2>
+                <h2 className="text-sm font-semibold text-slate-700">
+                  {pantryFilter === 'todos' ? 'Todos los alimentos' : `Alimentos (${pantryFilter})`} ({filteredPantry.length})
+                </h2>
                 <span className="text-xs text-slate-500">Ordenados por caducidad</span>
               </div>
 
-              {pantry.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
-                  <Refrigerator className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600 font-medium">¡Tu nevera está vacía!</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Añade alimentos arriba o sube la foto de tu ticket de compra.
-                  </p>
+              {filteredPantry.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
+                  <Refrigerator className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-600 font-medium">No hay productos en esta categoría</p>
+                  <p className="text-xs text-slate-400 mt-1">Prueba a seleccionar otra categoría o añadir un producto.</p>
                 </div>
               ) : (
-                [...pantry]
-                  .sort((a, b) => {
-                    const daysA = getDaysRemaining(a.expiryDate) ?? 999;
-                    const daysB = getDaysRemaining(b.expiryDate) ?? 999;
-                    return daysA - daysB;
-                  })
-                  .map(item => {
-                    const daysLeft = getDaysRemaining(item.expiryDate);
-                    const isExpired = daysLeft !== null && daysLeft < 0;
-                    const isUrgent = daysLeft !== null && daysLeft <= 2 && !isExpired;
-                    const isWarning = daysLeft !== null && daysLeft > 2 && daysLeft <= 5;
+                filteredPantry.map(item => {
+                  const daysLeft = getDaysRemaining(item.expiryDate);
+                  const isExpired = daysLeft !== null && daysLeft < 0;
+                  const isUrgent = daysLeft !== null && daysLeft <= 2 && !isExpired;
+                  const isWarning = daysLeft !== null && daysLeft > 2 && daysLeft <= 5;
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`bg-white p-3.5 rounded-2xl border transition shadow-xs flex items-center justify-between ${
-                          isExpired
-                            ? 'border-red-300 bg-red-50/30'
-                            : isUrgent
-                            ? 'border-amber-300 bg-amber-50/20'
-                            : 'border-slate-200/80 hover:border-emerald-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">
-                            {item.category === 'fruta-verdura' ? '🍎' :
-                             item.category === 'carne-pescado' ? '🥩' :
-                             item.category === 'lacteos' ? '🧀' :
-                             item.category === 'despensa' ? '🥫' :
-                             item.category === 'bebidas' ? '🧃' : '🍽️'}
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-slate-800 text-sm">{item.name}</h3>
-                              {item.price && (
-                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                  {item.price.toFixed(2)}€
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <p className="text-xs text-slate-500">
-                                {item.quantity} {item.unit}
-                              </p>
+                  return (
+                    <div
+                      key={item.id}
+                      className={`bg-white p-3.5 rounded-2xl border transition shadow-xs flex items-center justify-between ${
+                        isExpired
+                          ? 'border-red-300 bg-red-50/30'
+                          : isUrgent
+                          ? 'border-amber-300 bg-amber-50/20'
+                          : 'border-slate-200/80 hover:border-emerald-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">
+                          {item.category === 'fruta-verdura' ? '🍎' :
+                           item.category === 'carne-pescado' ? '🥩' :
+                           item.category === 'lacteos' ? '🧀' :
+                           item.category === 'despensa' ? '🥫' :
+                           item.category === 'bebidas' ? '🧃' :
+                           item.category === 'congelados' ? '🧊' : '🍽️'}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-slate-800 text-sm">{item.name}</h3>
+                            {item.price && (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                {item.price.toFixed(2)}€
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-slate-500">
+                              {item.quantity} {item.unit}
+                            </p>
 
-                              {/* Caducidad tag */}
-                              {daysLeft !== null && (
-                                <span
-                                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                                    isExpired
-                                      ? 'bg-red-100 text-red-700'
-                                      : isUrgent
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : isWarning
-                                      ? 'bg-yellow-100 text-yellow-800'
-                                      : 'bg-slate-100 text-slate-600'
-                                  }`}
-                                >
-                                  <Clock className="w-2.5 h-2.5" />
-                                  {isExpired
-                                    ? `Caducó hace ${Math.abs(daysLeft)}d`
-                                    : daysLeft === 0
-                                    ? 'Caduca hoy'
-                                    : daysLeft === 1
-                                    ? 'Caduca mañana'
-                                    : `Caduca en ${daysLeft} días`}
-                                </span>
-                              )}
-                            </div>
+                            {/* Caducidad tag */}
+                            {daysLeft !== null && (
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                  isExpired
+                                    ? 'bg-red-100 text-red-700'
+                                    : isUrgent
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : isWarning
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                <Clock className="w-2.5 h-2.5" />
+                                {isExpired
+                                  ? `Caducó hace ${Math.abs(daysLeft)}d`
+                                  : daysLeft === 0
+                                  ? 'Caduca hoy'
+                                  : daysLeft === 1
+                                  ? 'Caduca mañana'
+                                  : `Caduca en ${daysLeft} días`}
+                              </span>
+                            )}
                           </div>
                         </div>
-
-                        {/* Quick controls: - / + / delete */}
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => updatePantryQuantity(item.id, -1)}
-                            title="Gastar 1"
-                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => updatePantryQuantity(item.id, 1)}
-                            title="Sumar 1"
-                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => removePantryItem(item.id)}
-                            className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition ml-1"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
                       </div>
-                    );
-                  })
+
+                      {/* Quick controls: - / + / delete */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => updatePantryQuantity(item.id, -1)}
+                          title="Gastar 1"
+                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => updatePantryQuantity(item.id, 1)}
+                          title="Sumar 1"
+                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => removePantryItem(item.id)}
+                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition ml-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -554,7 +678,7 @@ TOTAL 12.45 €`;
         {/* TAB 2: LISTA DE LA COMPRA */}
         {activeTab === 'compra' && (
           <div className="space-y-4">
-            {/* Quick Add Form: Solo con el nombre y precio opcional */}
+            {/* Quick Add Form */}
             <form onSubmit={handleAddShoppingItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200 space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                 Añadir a la lista de compra
@@ -758,131 +882,282 @@ TOTAL 12.45 €`;
           </div>
         )}
 
-        {/* TAB 4: RECETAS INTELIGENTES (PRIORIZANDO LO QUE CADUCA) */}
+        {/* TAB 4: RECETAS FILTRABLES Y CREACIÓN DE RECETAS */}
         {activeTab === 'recetas' && (
           <div className="space-y-4">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-2xl shadow-sm">
-              <h2 className="font-bold text-base flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4" /> Recetas según Caducidad y Stock
-              </h2>
-              <p className="text-xs text-amber-100 mt-1">
-                Priorizamos platos que aprovechan lo que está a punto de ponerse malo en tu frigo.
-              </p>
+            {/* Top Bar with Add Recipe Button */}
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-base flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4" /> Recetas ({recipes.length})
+                </h2>
+                <p className="text-xs text-amber-100 mt-0.5">
+                  Priorizando lo que caduca antes.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowRecipeModal(true)}
+                className="bg-white text-orange-600 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-sm hover:bg-orange-50 transition active:scale-95"
+              >
+                <Plus className="w-4 h-4" /> Crear receta
+              </button>
             </div>
 
+            {/* Recipe Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setRecipeFilter(cat.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition flex items-center gap-1 ${
+                    recipeFilter === cat.id
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{cat.emoji}</span>
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Recipes List */}
             <div className="space-y-3">
-              {sortedRecipes.map(recipe => {
-                const evalResult = evaluateRecipe(recipe);
-                const canCookFully = evalResult.percentage === 100;
-                const hasUrgent = evalResult.urgentIngredients.length > 0;
-
-                return (
-                  <div
-                    key={recipe.id}
-                    className={`bg-white rounded-2xl border p-4 transition shadow-xs ${
-                      hasUrgent
-                        ? 'border-amber-400 ring-2 ring-amber-500/20'
-                        : canCookFully
-                        ? 'border-emerald-400 ring-2 ring-emerald-500/20'
-                        : 'border-slate-200'
-                    }`}
+              {filteredRecipes.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
+                  <ChefHat className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-600 font-medium">No hay recetas con ingredientes de esta categoría</p>
+                  <button
+                    onClick={() => setShowRecipeModal(true)}
+                    className="mt-2 text-xs text-amber-600 font-semibold underline"
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-bold text-slate-800 text-sm">{recipe.title}</h3>
-                          {hasUrgent && (
-                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3 text-amber-600" /> ¡Aprovecha lo que caduca!
-                            </span>
-                          )}
-                          {canCookFully && !hasUrgent && (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                              ¡Listo para hacer!
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1">{recipe.description}</p>
-                      </div>
-                    </div>
+                    + Añadir tu propia receta ahora
+                  </button>
+                </div>
+              ) : (
+                filteredRecipes.map(recipe => {
+                  const evalResult = evaluateRecipe(recipe);
+                  const canCookFully = evalResult.percentage === 100;
+                  const hasUrgent = evalResult.urgentIngredients.length > 0;
 
-                    {/* Urgent alert for this recipe */}
-                    {hasUrgent && (
-                      <div className="mt-2.5 bg-amber-50/80 border border-amber-200 text-amber-900 rounded-xl p-2 text-xs flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>
-                          Usa <strong>{evalResult.urgentIngredients.map(i => `${i.name} (en ${i.days}d)`).join(', ')}</strong> antes de que se estropee.
+                  return (
+                    <div
+                      key={recipe.id}
+                      className={`bg-white rounded-2xl border p-4 transition shadow-xs ${
+                        hasUrgent
+                          ? 'border-amber-400 ring-2 ring-amber-500/20'
+                          : canCookFully
+                          ? 'border-emerald-400 ring-2 ring-emerald-500/20'
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-bold text-slate-800 text-sm">{recipe.title}</h3>
+                            {hasUrgent && (
+                              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 text-amber-600" /> ¡Aprovecha lo que caduca!
+                              </span>
+                            )}
+                            {canCookFully && !hasUrgent && (
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                ¡Listo para hacer!
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">{recipe.description}</p>
+                        </div>
+
+                        {/* Delete custom recipe */}
+                        <button
+                          onClick={() => removeRecipe(recipe.id)}
+                          className="text-slate-300 hover:text-red-500 p-1 rounded-lg transition"
+                          title="Eliminar receta"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Urgent alert for this recipe */}
+                      {hasUrgent && (
+                        <div className="mt-2.5 bg-amber-50/80 border border-amber-200 text-amber-900 rounded-xl p-2 text-xs flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>
+                            Usa <strong>{evalResult.urgentIngredients.map(i => `${i.name} (en ${i.days}d)`).join(', ')}</strong> antes de que se estropee.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Tags */}
+                      <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" /> {recipe.cookingTimeMinutes} min
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Flame className="w-3.5 h-3.5" /> {recipe.difficulty}
+                        </span>
+                        <span className={`font-semibold ${canCookFully ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {evalResult.availableCount}/{evalResult.totalCount} ingredientes
                         </span>
                       </div>
-                    )}
 
-                    {/* Tags */}
-                    <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" /> {recipe.cookingTimeMinutes} min
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Flame className="w-3.5 h-3.5" /> {recipe.difficulty}
-                      </span>
-                      <span className={`font-semibold ${canCookFully ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {evalResult.availableCount}/{evalResult.totalCount} ingredientes
-                      </span>
-                    </div>
+                      {/* Ingredients summary */}
+                      <div className="mt-3 bg-slate-50 p-2.5 rounded-xl">
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                          Ingredientes necesarios:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {recipe.ingredients.map((ing, i) => {
+                            const match = pantry.find(p => p.name.toLowerCase().includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(p.name.toLowerCase()));
+                            const hasIt = !!match && match.quantity >= ing.quantity;
+                            const daysLeft = match ? getDaysRemaining(match.expiryDate) : null;
 
-                    {/* Ingredients summary */}
-                    <div className="mt-3 bg-slate-50 p-2.5 rounded-xl">
-                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                        Ingredientes necesarios:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {recipe.ingredients.map((ing, i) => {
-                          const match = pantry.find(p => p.name.toLowerCase().includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(p.name.toLowerCase()));
-                          const hasIt = !!match && match.quantity >= ing.quantity;
-                          const daysLeft = match ? getDaysRemaining(match.expiryDate) : null;
+                            return (
+                              <span
+                                key={i}
+                                className={`text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1 ${
+                                  hasIt
+                                    ? daysLeft !== null && daysLeft <= 3
+                                      ? 'bg-amber-100 text-amber-900 font-semibold border border-amber-300'
+                                      : 'bg-emerald-100 text-emerald-800 font-medium'
+                                    : 'bg-rose-100 text-rose-800 line-through'
+                                }`}
+                              >
+                                {ing.name} ({ing.quantity} {ing.unit})
+                                {hasIt && daysLeft !== null && daysLeft <= 3 && (
+                                  <span className="text-[9px] text-amber-700 bg-amber-200/60 px-1 rounded">
+                                    {daysLeft <= 0 ? 'hoy' : `${daysLeft}d`}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                          return (
-                            <span
-                              key={i}
-                              className={`text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1 ${
-                                hasIt
-                                  ? daysLeft !== null && daysLeft <= 3
-                                    ? 'bg-amber-100 text-amber-900 font-semibold border border-amber-300'
-                                    : 'bg-emerald-100 text-emerald-800 font-medium'
-                                  : 'bg-rose-100 text-rose-800 line-through'
-                              }`}
-                            >
-                              {ing.name} ({ing.quantity} {ing.unit})
-                              {hasIt && daysLeft !== null && daysLeft <= 3 && (
-                                <span className="text-[9px] text-amber-700 bg-amber-200/60 px-1 rounded">
-                                  {daysLeft <= 0 ? 'hoy' : `${daysLeft}d`}
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
+                      {/* Action button */}
+                      <div className="mt-3 pt-2 flex gap-2">
+                        <button
+                          onClick={() => handleCookRecipe(recipe)}
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                            canCookFully
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                              : 'bg-amber-500 hover:bg-amber-600 text-white'
+                          }`}
+                        >
+                          <ChefHat className="w-4 h-4" /> Cocinar y descontar ingredientes
+                        </button>
                       </div>
                     </div>
-
-                    {/* Action button */}
-                    <div className="mt-3 pt-2 flex gap-2">
-                      <button
-                        onClick={() => handleCookRecipe(recipe)}
-                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                          canCookFully
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                            : 'bg-amber-500 hover:bg-amber-600 text-white'
-                        }`}
-                      >
-                        <ChefHat className="w-4 h-4" /> Cocinar y descontar ingredientes
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}
       </main>
+
+      {/* MODAL: CREAR NUEVA RECETA */}
+      {showRecipeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <ChefHat className="w-5 h-5 text-amber-500" /> Nueva Receta
+              </h3>
+              <button
+                onClick={() => setShowRecipeModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRecipe} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Nombre del plato</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Macarrones con queso y bacon"
+                  value={newRecipeTitle}
+                  onChange={e => setNewRecipeTitle(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Descripción breve</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Comida rica y rápida para cenar"
+                  value={newRecipeDesc}
+                  onChange={e => setNewRecipeDesc(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Tiempo (min)</label>
+                  <input
+                    type="number"
+                    value={newRecipeTime}
+                    onChange={e => setNewRecipeTime(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Dificultad</label>
+                  <select
+                    value={newRecipeDifficulty}
+                    onChange={e => setNewRecipeDifficulty(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="fácil">Fácil</option>
+                    <option value="medio">Medio</option>
+                    <option value="difícil">Difícil</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
+                  Ingredientes (uno por línea: <span className="font-normal text-slate-400">Nombre, Cantidad, Unidad</span>)
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder={`Pasta, 150, g\nTomate frito, 100, g\nQueso, 50, g`}
+                  value={newRecipeIngredients}
+                  onChange={e => setNewRecipeIngredients(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  💡 Ejemplo: si escribes "Huevos, 2, uds", descontará 2 huevos del frigo al cocinar.
+                </p>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRecipeModal(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-xs font-semibold transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                  Guardar receta
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Mobile Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-200 flex justify-around py-2 px-1 z-30 shadow-lg">
