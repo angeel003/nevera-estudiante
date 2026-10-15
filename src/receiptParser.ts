@@ -1,5 +1,5 @@
 import type { PantryItem } from './types';
-import { guessCategory, guessUnit } from './mockData';
+import { guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
 
 export interface ParsedTicketItem {
   name: string;
@@ -84,6 +84,8 @@ export function convertToPantryItem(item: ParsedTicketItem): PantryItem {
     category: guessCategory(item.name),
     quantity: item.quantity,
     unit: item.unit,
+    price: item.price,
     addedAt: new Date().toISOString(),
+    expiryDate: getDefaultExpiryDate(item.name),
   };
 }

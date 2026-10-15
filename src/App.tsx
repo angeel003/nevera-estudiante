@@ -15,11 +15,12 @@ import {
   Check,
   Flame,
   Clock,
-  ArrowRight
+  ArrowRight,
+  AlertTriangle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { PantryItem, ShoppingItem, Recipe } from './types';
-import { INITIAL_RECIPES, guessCategory, guessUnit } from './mockData';
+import { INITIAL_RECIPES, guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
 import { parseReceiptText, convertToPantryItem, type ParsedTicketItem } from './receiptParser';
 
 const STORAGE_KEY_PANTRY = 'estudiante_app_pantry';
@@ -28,18 +29,37 @@ const STORAGE_KEY_SHOPPING = 'estudiante_app_shopping';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'frigo' | 'compra' | 'recetas' | 'ticket'>('frigo');
 
-  // State: Pantry
+  // Calculate days remaining until expiry
+  const getDaysRemaining = (expiryDate?: string): number | null => {
+    if (!expiryDate) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const exp = new Date(expiryDate);
+    exp.setHours(0, 0, 0, 0);
+    const diffTime = exp.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  // Helper date offset
+  const getOffsetDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  };
+
+  // State: Pantry with prices & expiry dates
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_PANTRY);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* ignore */ }
     }
     return [
-      { id: 'p1', name: 'Huevos Camperos', category: 'lacteos', quantity: 6, unit: 'uds', addedAt: new Date().toISOString() },
-      { id: 'p2', name: 'Leche Semidesnatada', category: 'lacteos', quantity: 2, unit: 'L', addedAt: new Date().toISOString() },
-      { id: 'p3', name: 'Tomate Frito', category: 'despensa', quantity: 1, unit: 'g', addedAt: new Date().toISOString() },
-      { id: 'p4', name: 'Pasta Macarrones', category: 'despensa', quantity: 400, unit: 'g', addedAt: new Date().toISOString() },
-      { id: 'p5', name: 'Atún en lata', category: 'carne-pescado', quantity: 3, unit: 'uds', addedAt: new Date().toISOString() },
+      { id: 'p1', name: 'Huevos Camperos', category: 'lacteos', quantity: 6, unit: 'uds', price: 2.45, expiryDate: getOffsetDate(12), addedAt: new Date().toISOString() },
+      { id: 'p2', name: 'Leche Semidesnatada', category: 'lacteos', quantity: 2, unit: 'L', price: 1.95, expiryDate: getOffsetDate(2), addedAt: new Date().toISOString() },
+      { id: 'p3', name: 'Pechuga de Pollo', category: 'carne-pescado', quantity: 400, unit: 'g', price: 4.20, expiryDate: getOffsetDate(1), addedAt: new Date().toISOString() },
+      { id: 'p4', name: 'Tomate Frito', category: 'despensa', quantity: 1, unit: 'g', price: 0.85, expiryDate: getOffsetDate(90), addedAt: new Date().toISOString() },
+      { id: 'p5', name: 'Pasta Macarrones', category: 'despensa', quantity: 400, unit: 'g', price: 0.90, expiryDate: getOffsetDate(180), addedAt: new Date().toISOString() },
+      { id: 'p6', name: 'Atún en lata', category: 'carne-pescado', quantity: 3, unit: 'uds', price: 2.10, expiryDate: getOffsetDate(240), addedAt: new Date().toISOString() },
     ];
   });
 
@@ -50,9 +70,9 @@ export default function App() {
       try { return JSON.parse(saved); } catch (e) { /* ignore */ }
     }
     return [
-      { id: 's1', name: 'Patatas', category: 'fruta-verdura', quantity: 1, unit: 'kg', checked: false },
-      { id: 's2', name: 'Cebolla', category: 'fruta-verdura', quantity: 2, unit: 'uds', checked: false },
-      { id: 's3', name: 'Pechuga de Pollo', category: 'carne-pescado', quantity: 500, unit: 'g', checked: false },
+      { id: 's1', name: 'Patatas', category: 'fruta-verdura', quantity: 1, unit: 'kg', estimatedPrice: 1.60, checked: false },
+      { id: 's2', name: 'Cebolla', category: 'fruta-verdura', quantity: 2, unit: 'uds', estimatedPrice: 1.10, checked: false },
+      { id: 's3', name: 'Queso Rallado', category: 'lacteos', quantity: 1, unit: 'uds', estimatedPrice: 1.85, checked: false },
     ];
   });
 
@@ -61,8 +81,12 @@ export default function App() {
 
   // Inputs for quick additions
   const [quickShoppingName, setQuickShoppingName] = useState('');
+  const [quickShoppingPrice, setQuickShoppingPrice] = useState<string>('');
+  
   const [quickPantryName, setQuickPantryName] = useState('');
   const [quickPantryQty, setQuickPantryQty] = useState(1);
+  const [quickPantryPrice, setQuickPantryPrice] = useState<string>('');
+  const [quickPantryExpiry, setQuickPantryExpiry] = useState<string>('');
 
   // Ticket scan state
   const [previewItems, setPreviewItems] = useState<ParsedTicketItem[]>([]);
@@ -77,11 +101,12 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY_SHOPPING, JSON.stringify(shoppingList));
   }, [shoppingList]);
 
-
-  // Handle Quick Add to Shopping List (Solo con el nombre)
+  // Handle Quick Add to Shopping List
   const handleAddShoppingItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickShoppingName.trim()) return;
+
+    const price = quickShoppingPrice ? parseFloat(quickShoppingPrice.replace(',', '.')) : undefined;
 
     const newItem: ShoppingItem = {
       id: 'shop_' + Date.now(),
@@ -89,11 +114,13 @@ export default function App() {
       category: guessCategory(quickShoppingName),
       quantity: 1,
       unit: guessUnit(quickShoppingName),
+      estimatedPrice: isNaN(price || 0) ? undefined : price,
       checked: false,
     };
 
     setShoppingList([newItem, ...shoppingList]);
     setQuickShoppingName('');
+    setQuickShoppingPrice('');
   };
 
   // Toggle Shopping List Item Check
@@ -114,6 +141,8 @@ export default function App() {
       category: item.category,
       quantity: item.quantity,
       unit: item.unit,
+      price: item.estimatedPrice,
+      expiryDate: getDefaultExpiryDate(item.name),
       addedAt: new Date().toISOString(),
     }));
 
@@ -127,18 +156,25 @@ export default function App() {
     e.preventDefault();
     if (!quickPantryName.trim()) return;
 
+    const price = quickPantryPrice ? parseFloat(quickPantryPrice.replace(',', '.')) : undefined;
+    const expiry = quickPantryExpiry || getDefaultExpiryDate(quickPantryName);
+
     const newItem: PantryItem = {
       id: 'pantry_' + Date.now(),
       name: quickPantryName.trim(),
       category: guessCategory(quickPantryName),
       quantity: Number(quickPantryQty) || 1,
       unit: guessUnit(quickPantryName),
+      price: isNaN(price || 0) ? undefined : price,
+      expiryDate: expiry,
       addedAt: new Date().toISOString(),
     };
 
     setPantry([newItem, ...pantry]);
     setQuickPantryName('');
     setQuickPantryQty(1);
+    setQuickPantryPrice('');
+    setQuickPantryExpiry('');
   };
 
   // Update Pantry Item Quantity (Gastar o Añadir)
@@ -164,13 +200,13 @@ export default function App() {
   // Process Mock / Demo Ticket
   const handleLoadDemoTicket = () => {
     const demo = `MERCADONA S.A.
-1 HUEVOS CAMPEROS L 12U 2.40
+1 HUEVOS CAMPEROS L 12U 2.45
 2 LECHE ENTERA 1L 1.95
 1 PLATANO DE CANARIAS 1.80
 1 PECHUGA POLLO FILETES 4.50
 1 TOMATE FRITO BRICK 0.85
 1 PASTA MACARRONES 500G 0.90
-TOTAL 12.40 €`;
+TOTAL 12.45 €`;
     const parsed = parseReceiptText(demo);
     setPreviewItems(parsed);
   };
@@ -182,7 +218,7 @@ TOTAL 12.40 €`;
       const reader = new FileReader();
       reader.onloadend = () => {
         setTicketImagePreview(reader.result as string);
-        // Automatically simulate OCR reading for the demo
+        // Automatically simulate OCR reading for demo
         handleLoadDemoTicket();
       };
       reader.readAsDataURL(file);
@@ -196,7 +232,7 @@ TOTAL 12.40 €`;
     const newItems = previewItems.map(item => convertToPantryItem(item));
     setPantry(prev => [...newItems, ...prev]);
 
-    // Also auto-check or remove from shopping list if they were pending
+    // Also auto-remove from shopping list if they were bought
     setShoppingList(prev =>
       prev.filter(shopItem => {
         const foundInTicket = previewItems.some(
@@ -252,21 +288,51 @@ TOTAL 12.40 €`;
     confetti({ particleCount: 80, spread: 100 });
   };
 
-  // Calculate recipes you can cook right now with your pantry
-  const getRecipePantryMatch = (recipe: Recipe) => {
+  // Recipe evaluation: takes ingredients availability + urgency of expiring ingredients
+  const evaluateRecipe = (recipe: Recipe) => {
     let availableCount = 0;
+    let urgentIngredients: { name: string; days: number }[] = [];
+
     recipe.ingredients.forEach(req => {
       const match = pantry.find(p => p.name.toLowerCase().includes(req.name.toLowerCase()) || req.name.toLowerCase().includes(p.name.toLowerCase()));
       if (match && match.quantity >= req.quantity) {
         availableCount++;
+        const days = getDaysRemaining(match.expiryDate);
+        if (days !== null && days <= 3) {
+          urgentIngredients.push({ name: match.name, days });
+        }
       }
     });
+
+    const percentage = Math.round((availableCount / recipe.ingredients.length) * 100);
+    // Score based on completion + boost if has expiring ingredients
+    const urgencyScore = (urgentIngredients.length * 30) + percentage;
+
     return {
       availableCount,
       totalCount: recipe.ingredients.length,
-      percentage: Math.round((availableCount / recipe.ingredients.length) * 100)
+      percentage,
+      urgentIngredients,
+      urgencyScore
     };
   };
+
+  // Sorted recipes: prioritize recipes that use items expiring soonest!
+  const sortedRecipes = [...recipes].sort((a, b) => {
+    const evalA = evaluateRecipe(a);
+    const evalB = evaluateRecipe(b);
+    return evalB.urgencyScore - evalA.urgencyScore;
+  });
+
+  // Calculate totals
+  const totalPantryValue = pantry.reduce((sum, item) => sum + (item.price || 0), 0);
+  const totalShoppingEstimate = shoppingList.reduce((sum, item) => sum + (item.estimatedPrice || 0), 0);
+
+  // Expiring soon items in pantry (<= 3 days)
+  const expiringSoonCount = pantry.filter(item => {
+    const d = getDaysRemaining(item.expiryDate);
+    return d !== null && d <= 3;
+  }).length;
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col shadow-xl">
@@ -277,12 +343,35 @@ TOTAL 12.40 €`;
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
               <span>🍳</span> NeveraEstudiante
             </h1>
-            <p className="text-xs text-emerald-100">Control de despensa, compras y recetas</p>
+            <p className="text-xs text-emerald-100">Control de caducidades, tickets y comidas</p>
           </div>
-          <span className="text-xs bg-emerald-500/40 border border-emerald-400/50 px-2.5 py-1 rounded-full font-medium">
-            {pantry.length} prods. en frigo
-          </span>
+          <div className="text-right">
+            <span className="text-xs bg-emerald-500/40 border border-emerald-400/50 px-2.5 py-1 rounded-full font-medium inline-block">
+              {pantry.length} prods
+            </span>
+            {totalPantryValue > 0 && (
+              <p className="text-[11px] text-emerald-200 mt-1 font-semibold">
+                Valor: {totalPantryValue.toFixed(2)}€
+              </p>
+            )}
+          </div>
         </div>
+
+        {/* Warning banner if items are expiring soon */}
+        {expiringSoonCount > 0 && (
+          <div
+            onClick={() => setActiveTab('recetas')}
+            className="mt-3 bg-amber-500/20 border border-amber-300/40 rounded-xl p-2.5 flex items-center justify-between text-xs cursor-pointer hover:bg-amber-500/30 transition"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>
+                <strong>¡Atención!</strong> {expiringSoonCount} producto{expiringSoonCount > 1 ? 's caducan' : ' caduca'} pronto.
+              </span>
+            </div>
+            <span className="underline font-semibold text-[11px]">Ver recetas</span>
+          </div>
+        )}
       </header>
 
       {/* Main Content Area */}
@@ -290,15 +379,15 @@ TOTAL 12.40 €`;
         {/* TAB 1: FRIGO / DESPENSA */}
         {activeTab === 'frigo' && (
           <div className="space-y-4">
-            {/* Quick Add Form */}
-            <form onSubmit={handleAddPantryItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 block">
+            {/* Quick Add Form with Price & Expiry */}
+            <form onSubmit={handleAddPantryItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200 space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                 Añadir al frigorífico
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Ej: Leche, Huevos, Manzanas..."
+                  placeholder="Producto (ej: Leche, Huevos...)"
                   value={quickPantryName}
                   onChange={e => setQuickPantryName(e.target.value)}
                   className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -308,13 +397,37 @@ TOTAL 12.40 €`;
                   min="1"
                   value={quickPantryQty}
                   onChange={e => setQuickPantryQty(Number(e.target.value))}
-                  className="w-16 bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-14 bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  title="Cantidad"
                 />
+              </div>
+
+              {/* Price and Expiry row */}
+              <div className="flex gap-2 items-center pt-1">
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-2.5 text-xs text-slate-400">€</span>
+                  <input
+                    type="text"
+                    placeholder="Precio (opcional)"
+                    value={quickPantryPrice}
+                    onChange={e => setQuickPantryPrice(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    type="date"
+                    value={quickPantryExpiry}
+                    onChange={e => setQuickPantryExpiry(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    title="Fecha de caducidad"
+                  />
+                </div>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs"
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
             </form>
@@ -322,8 +435,8 @@ TOTAL 12.40 €`;
             {/* Pantry List */}
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-sm font-semibold text-slate-700">Lo que tienes guardado</h2>
-                <span className="text-xs text-slate-500">Usa + / - para descontar</span>
+                <h2 className="text-sm font-semibold text-slate-700">Tus alimentos guardados</h2>
+                <span className="text-xs text-slate-500">Ordenados por caducidad</span>
               </div>
 
               {pantry.length === 0 ? (
@@ -335,52 +448,104 @@ TOTAL 12.40 €`;
                   </p>
                 </div>
               ) : (
-                pantry.map(item => (
-                  <div
-                    key={item.id}
-                    className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between hover:border-emerald-300 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">
-                        {item.category === 'fruta-verdura' ? '🍎' :
-                         item.category === 'carne-pescado' ? '🥩' :
-                         item.category === 'lacteos' ? '🧀' :
-                         item.category === 'despensa' ? '🥫' :
-                         item.category === 'bebidas' ? '🧃' : '🍽️'}
-                      </span>
-                      <div>
-                        <h3 className="font-semibold text-slate-800 text-sm">{item.name}</h3>
-                        <p className="text-xs text-slate-500">
-                          {item.quantity} {item.unit}
-                        </p>
-                      </div>
-                    </div>
+                [...pantry]
+                  .sort((a, b) => {
+                    const daysA = getDaysRemaining(a.expiryDate) ?? 999;
+                    const daysB = getDaysRemaining(b.expiryDate) ?? 999;
+                    return daysA - daysB;
+                  })
+                  .map(item => {
+                    const daysLeft = getDaysRemaining(item.expiryDate);
+                    const isExpired = daysLeft !== null && daysLeft < 0;
+                    const isUrgent = daysLeft !== null && daysLeft <= 2 && !isExpired;
+                    const isWarning = daysLeft !== null && daysLeft > 2 && daysLeft <= 5;
 
-                    {/* Quick controls: - / + / delete */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => updatePantryQuantity(item.id, -1)}
-                        title="Gastar 1"
-                        className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                    return (
+                      <div
+                        key={item.id}
+                        className={`bg-white p-3.5 rounded-2xl border transition shadow-xs flex items-center justify-between ${
+                          isExpired
+                            ? 'border-red-300 bg-red-50/30'
+                            : isUrgent
+                            ? 'border-amber-300 bg-amber-50/20'
+                            : 'border-slate-200/80 hover:border-emerald-300'
+                        }`}
                       >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => updatePantryQuantity(item.id, 1)}
-                        title="Sumar 1"
-                        className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => removePantryItem(item.id)}
-                        className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition ml-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">
+                            {item.category === 'fruta-verdura' ? '🍎' :
+                             item.category === 'carne-pescado' ? '🥩' :
+                             item.category === 'lacteos' ? '🧀' :
+                             item.category === 'despensa' ? '🥫' :
+                             item.category === 'bebidas' ? '🧃' : '🍽️'}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-slate-800 text-sm">{item.name}</h3>
+                              {item.price && (
+                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  {item.price.toFixed(2)}€
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-xs text-slate-500">
+                                {item.quantity} {item.unit}
+                              </p>
+
+                              {/* Caducidad tag */}
+                              {daysLeft !== null && (
+                                <span
+                                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                    isExpired
+                                      ? 'bg-red-100 text-red-700'
+                                      : isUrgent
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : isWarning
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  <Clock className="w-2.5 h-2.5" />
+                                  {isExpired
+                                    ? `Caducó hace ${Math.abs(daysLeft)}d`
+                                    : daysLeft === 0
+                                    ? 'Caduca hoy'
+                                    : daysLeft === 1
+                                    ? 'Caduca mañana'
+                                    : `Caduca en ${daysLeft} días`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quick controls: - / + / delete */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => updatePantryQuantity(item.id, -1)}
+                            title="Gastar 1"
+                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => updatePantryQuantity(item.id, 1)}
+                            title="Sumar 1"
+                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removePantryItem(item.id)}
+                            className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition ml-1"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
               )}
             </div>
           </div>
@@ -389,24 +554,31 @@ TOTAL 12.40 €`;
         {/* TAB 2: LISTA DE LA COMPRA */}
         {activeTab === 'compra' && (
           <div className="space-y-4">
-            {/* Quick Add Form: Solo con el nombre */}
-            <form onSubmit={handleAddShoppingItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 block">
-                Añadir rápido solo con el nombre
+            {/* Quick Add Form: Solo con el nombre y precio opcional */}
+            <form onSubmit={handleAddShoppingItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200 space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+                Añadir a la lista de compra
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Ej: Leche, Pasta, Papel..."
+                  placeholder="Ej: Leche, Pasta, Yogures..."
                   value={quickShoppingName}
                   onChange={e => setQuickShoppingName(e.target.value)}
                   className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+                <input
+                  type="text"
+                  placeholder="Precio aprox €"
+                  value={quickShoppingPrice}
+                  onChange={e => setQuickShoppingPrice(e.target.value)}
+                  className="w-24 bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs"
                 >
-                  <Plus className="w-5 h-5 mr-1" /> Añadir
+                  <Plus className="w-5 h-5" />
                 </button>
               </div>
             </form>
@@ -414,13 +586,20 @@ TOTAL 12.40 €`;
             {/* Shopping List Items */}
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-sm font-semibold text-slate-700">Por comprar ({shoppingList.length})</h2>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-700">Por comprar ({shoppingList.length})</h2>
+                  {totalShoppingEstimate > 0 && (
+                    <span className="text-xs text-slate-500 font-medium">
+                      Estimado: ~{totalShoppingEstimate.toFixed(2)}€
+                    </span>
+                  )}
+                </div>
                 {shoppingList.some(i => i.checked) && (
                   <button
                     onClick={handleTransferCheckedToPantry}
                     className="text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-full transition flex items-center gap-1"
                   >
-                    <ArrowRight className="w-3.5 h-3.5" /> Pasar marcados al frigo
+                    <ArrowRight className="w-3.5 h-3.5" /> Pasar al frigo
                   </button>
                 )}
               </div>
@@ -447,10 +626,17 @@ TOTAL 12.40 €`;
                         <Circle className="w-5 h-5 text-slate-400 shrink-0" />
                       )}
                       <div>
-                        <span className={`text-sm font-medium ${item.checked ? 'line-through text-slate-500' : 'text-slate-800'}`}>
-                          {item.name}
-                        </span>
-                        <span className="text-xs text-slate-400 ml-2">({item.category})</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${item.checked ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                            {item.name}
+                          </span>
+                          {item.estimatedPrice && (
+                            <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {item.estimatedPrice.toFixed(2)}€
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400">({item.category})</span>
                       </div>
                     </div>
                     <button
@@ -479,7 +665,7 @@ TOTAL 12.40 €`;
               <div>
                 <h2 className="text-base font-bold text-slate-800">Escanear Ticket de Compra</h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  Sube una foto de tu ticket de Mercadona, Carrefour, Lidl, etc. para añadir todo automáticamente al frigo.
+                  Lee productos, precios y calcula fechas de caducidad estimadas de tu compra.
                 </p>
               </div>
 
@@ -532,6 +718,9 @@ TOTAL 12.40 €`;
                     <Sparkles className="w-4 h-4 text-emerald-600" />
                     <span>Detectados {previewItems.length} alimentos</span>
                   </div>
+                  <span className="text-xs font-semibold text-emerald-700">
+                    Total: {previewItems.reduce((acc, i) => acc + (i.price || 0), 0).toFixed(2)}€
+                  </span>
                 </div>
 
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -540,15 +729,20 @@ TOTAL 12.40 €`;
                       key={idx}
                       className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200"
                     >
-                      <div className="flex items-center gap-2">
+                      <div>
                         <span className="font-semibold text-slate-800">{item.name}</span>
-                        {item.price && (
-                          <span className="text-slate-400">({item.price.toFixed(2)}€)</span>
-                        )}
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Caducidad aprox: {getDefaultExpiryDate(item.name)}
+                        </div>
                       </div>
-                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-medium">
-                        {item.quantity} {item.unit}
-                      </span>
+                      <div className="text-right">
+                        {item.price && (
+                          <div className="font-bold text-emerald-700">{item.price.toFixed(2)}€</div>
+                        )}
+                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-medium text-[10px]">
+                          {item.quantity} {item.unit}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -557,42 +751,52 @@ TOTAL 12.40 €`;
                   onClick={handleAddTicketItemsToPantry}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 shadow-xs"
                 >
-                  <Check className="w-4 h-4" /> Añadir todo a mi nevera
+                  <Check className="w-4 h-4" /> Añadir todo a mi nevera con caducidades
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 4: RECETAS & QUÉ COCINAR */}
+        {/* TAB 4: RECETAS INTELIGENTES (PRIORIZANDO LO QUE CADUCA) */}
         {activeTab === 'recetas' && (
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-2xl shadow-sm">
               <h2 className="font-bold text-base flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4" /> ¿Qué puedo cocinar hoy?
+                <Sparkles className="w-4 h-4" /> Recetas según Caducidad y Stock
               </h2>
               <p className="text-xs text-amber-100 mt-1">
-                Recetas calculadas según lo que tienes disponible en el frigorífico.
+                Priorizamos platos que aprovechan lo que está a punto de ponerse malo en tu frigo.
               </p>
             </div>
 
             <div className="space-y-3">
-              {recipes.map(recipe => {
-                const match = getRecipePantryMatch(recipe);
-                const canCookFully = match.percentage === 100;
+              {sortedRecipes.map(recipe => {
+                const evalResult = evaluateRecipe(recipe);
+                const canCookFully = evalResult.percentage === 100;
+                const hasUrgent = evalResult.urgentIngredients.length > 0;
 
                 return (
                   <div
                     key={recipe.id}
                     className={`bg-white rounded-2xl border p-4 transition shadow-xs ${
-                      canCookFully ? 'border-emerald-400 ring-2 ring-emerald-500/20' : 'border-slate-200'
+                      hasUrgent
+                        ? 'border-amber-400 ring-2 ring-amber-500/20'
+                        : canCookFully
+                        ? 'border-emerald-400 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200'
                     }`}
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-bold text-slate-800 text-sm">{recipe.title}</h3>
-                          {canCookFully && (
+                          {hasUrgent && (
+                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" /> ¡Aprovecha lo que caduca!
+                            </span>
+                          )}
+                          {canCookFully && !hasUrgent && (
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                               ¡Listo para hacer!
                             </span>
@@ -601,6 +805,16 @@ TOTAL 12.40 €`;
                         <p className="text-xs text-slate-500 mt-1">{recipe.description}</p>
                       </div>
                     </div>
+
+                    {/* Urgent alert for this recipe */}
+                    {hasUrgent && (
+                      <div className="mt-2.5 bg-amber-50/80 border border-amber-200 text-amber-900 rounded-xl p-2 text-xs flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>
+                          Usa <strong>{evalResult.urgentIngredients.map(i => `${i.name} (en ${i.days}d)`).join(', ')}</strong> antes de que se estropee.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Tags */}
                     <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
@@ -611,7 +825,7 @@ TOTAL 12.40 €`;
                         <Flame className="w-3.5 h-3.5" /> {recipe.difficulty}
                       </span>
                       <span className={`font-semibold ${canCookFully ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {match.availableCount}/{match.totalCount} ingredientes
+                        {evalResult.availableCount}/{evalResult.totalCount} ingredientes
                       </span>
                     </div>
 
@@ -622,15 +836,27 @@ TOTAL 12.40 €`;
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {recipe.ingredients.map((ing, i) => {
-                          const hasIt = pantry.some(p => p.name.toLowerCase().includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(p.name.toLowerCase()));
+                          const match = pantry.find(p => p.name.toLowerCase().includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(p.name.toLowerCase()));
+                          const hasIt = !!match && match.quantity >= ing.quantity;
+                          const daysLeft = match ? getDaysRemaining(match.expiryDate) : null;
+
                           return (
                             <span
                               key={i}
-                              className={`text-[11px] px-2 py-0.5 rounded-md ${
-                                hasIt ? 'bg-emerald-100 text-emerald-800 font-medium' : 'bg-rose-100 text-rose-800 line-through'
+                              className={`text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1 ${
+                                hasIt
+                                  ? daysLeft !== null && daysLeft <= 3
+                                    ? 'bg-amber-100 text-amber-900 font-semibold border border-amber-300'
+                                    : 'bg-emerald-100 text-emerald-800 font-medium'
+                                  : 'bg-rose-100 text-rose-800 line-through'
                               }`}
                             >
                               {ing.name} ({ing.quantity} {ing.unit})
+                              {hasIt && daysLeft !== null && daysLeft <= 3 && (
+                                <span className="text-[9px] text-amber-700 bg-amber-200/60 px-1 rounded">
+                                  {daysLeft <= 0 ? 'hoy' : `${daysLeft}d`}
+                                </span>
+                              )}
                             </span>
                           );
                         })}
@@ -697,12 +923,15 @@ TOTAL 12.40 €`;
 
         <button
           onClick={() => setActiveTab('recetas')}
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition ${
+          className={`flex flex-col items-center py-1 px-3 rounded-xl transition relative ${
             activeTab === 'recetas' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'
           }`}
         >
           <ChefHat className="w-5 h-5" />
           <span className="text-[11px] mt-1">Recetas</span>
+          {expiringSoonCount > 0 && (
+            <span className="absolute top-1 right-2.5 w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
+          )}
         </button>
       </nav>
     </div>

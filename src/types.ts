@@ -6,8 +6,9 @@ export interface PantryItem {
   category: Category;
   quantity: number;
   unit: string; // 'uds', 'g', 'kg', 'ml', 'L', 'paquete'
-  addedAt: string;
-  expiresInDays?: number;
+  price?: number; // Precio en euros
+  addedAt: string; // ISO string
+  expiryDate?: string; // YYYY-MM-DD
 }
 
 export interface ShoppingItem {
@@ -16,6 +17,7 @@ export interface ShoppingItem {
   category: Category;
   quantity: number;
   unit: string;
+  estimatedPrice?: number;
   checked: boolean;
 }
 

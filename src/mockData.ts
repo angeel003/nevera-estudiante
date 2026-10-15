@@ -110,3 +110,25 @@ export function guessUnit(name: string): string {
   if (n.match(/pollo|carne|pescado|ternera/)) return 'g';
   return 'uds';
 }
+
+// Estimar días habituales de caducidad según el producto
+export function guessExpiryDays(name: string): number {
+  const n = name.toLowerCase();
+  if (n.match(/pescado|merluza|salmon|salmón/)) return 2; // Pescado fresco: 2 días
+  if (n.match(/carne|pollo|pechuga|ternera|cerdo|picada/)) return 3; // Carnes frescas: 3 días
+  if (n.match(/lechuga|fresa|aguacate|tomate/)) return 5; // Verdura/fruta delicada: 4-5 días
+  if (n.match(/leche|yogur|yogurt|queso fresco/)) return 7; // Lácteos frescos: 7 días
+  if (n.match(/fruta|platano|plátano|manzana|naranja|limon/)) return 10;
+  if (n.match(/huevo|huevos/)) return 18; // Huevos: ~2-3 semanas
+  if (n.match(/queso curado|mantequilla/)) return 25;
+  if (n.match(/arroz|pasta|lata|atun|atún|legumbre|harina|aceite/)) return 180; // Despensa / conservas: 6 meses
+  return 14; // Por defecto 2 semanas
+}
+
+export function getDefaultExpiryDate(name: string): string {
+  const days = guessExpiryDays(name);
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0]; // YYYY-MM-DD
+}
+
