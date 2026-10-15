@@ -25,6 +25,7 @@ export interface Recipe {
   id: string;
   title: string;
   description: string;
+  servings: number; // Número de raciones base (ej: 1 o 2 personas)
   cookingTimeMinutes: number;
   difficulty: 'fácil' | 'medio' | 'difícil';
   ingredients: {

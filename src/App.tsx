@@ -17,7 +17,8 @@ import {
   Clock,
   ArrowRight,
   AlertTriangle,
-  X
+  X,
+  Users
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { PantryItem, ShoppingItem, Recipe, Category } from './types';
@@ -49,9 +50,14 @@ export default function App() {
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [newRecipeTitle, setNewRecipeTitle] = useState('');
   const [newRecipeDesc, setNewRecipeDesc] = useState('');
+  const [newRecipeServings, setNewRecipeServings] = useState(1);
   const [newRecipeTime, setNewRecipeTime] = useState(15);
   const [newRecipeDifficulty, setNewRecipeDifficulty] = useState<'fácil' | 'medio' | 'difícil'>('fácil');
   const [newRecipeIngredients, setNewRecipeIngredients] = useState<string>(''); // multiline name, qty, unit
+
+  // Dynamic servings multiplier state per recipe (e.g. { 'r1': 2, 'r2': 3 })
+  const [recipeServingsMap, setRecipeServingsMap] = useState<Record<string, number>>({});
+
 
   // Helper date offset
   const getOffsetDate = (days: number) => {
@@ -263,6 +269,7 @@ export default function App() {
       id: 'rec_' + Date.now(),
       title: newRecipeTitle.trim(),
       description: newRecipeDesc.trim() || 'Receta propia añadida por ti.',
+      servings: Number(newRecipeServings) || 1,
       cookingTimeMinutes: Number(newRecipeTime) || 15,
       difficulty: newRecipeDifficulty,
       ingredients: parsedIngredients,
@@ -273,6 +280,7 @@ export default function App() {
     setShowRecipeModal(false);
     setNewRecipeTitle('');
     setNewRecipeDesc('');
+    setNewRecipeServings(1);
     setNewRecipeIngredients('');
     confetti({ particleCount: 60, spread: 70 });
   };
@@ -327,20 +335,36 @@ TOTAL 12.45 €`;
     confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
   };
 
-  // Cook Recipe & Deduct Ingredients
+  // Get current selected servings for a recipe (defaults to recipe.servings || 1)
+  const getRecipeServings = (recipe: Recipe): number => {
+    return recipeServingsMap[recipe.id] ?? recipe.servings ?? 1;
+  };
+
+  // Change servings for a recipe
+  const changeRecipeServings = (recipeId: string, newServings: number) => {
+    if (newServings < 1) return;
+    setRecipeServingsMap(prev => ({ ...prev, [recipeId]: newServings }));
+  };
+
+  // Cook Recipe & Deduct Ingredients (scaled by selected servings)
   const handleCookRecipe = (recipe: Recipe) => {
+    const currentServings = getRecipeServings(recipe);
+    const baseServings = recipe.servings || 1;
+    const factor = currentServings / baseServings;
+
     let missing: string[] = [];
 
     recipe.ingredients.forEach(req => {
+      const neededQty = Math.round(req.quantity * factor * 10) / 10;
       const match = pantry.find(p => p.name.toLowerCase().includes(req.name.toLowerCase()) || req.name.toLowerCase().includes(p.name.toLowerCase()));
-      if (!match || match.quantity < req.quantity) {
-        missing.push(`${req.name} (necesitas ${req.quantity} ${req.unit})`);
+      if (!match || match.quantity < neededQty) {
+        missing.push(`${req.name} (necesitas ${neededQty} ${req.unit})`);
       }
     });
 
     if (missing.length > 0) {
       const proceed = window.confirm(
-        `Te faltan algunos ingredientes:\n- ${missing.join('\n- ')}\n\n¿Quieres cocinarla igualmente y descontar lo que tengas?`
+        `Para ${currentServings} persona${currentServings > 1 ? 's' : ''} te faltan ingredientes:\n- ${missing.join('\n- ')}\n\n¿Quieres cocinarla igualmente y descontar lo que tengas?`
       );
       if (!proceed) return;
     }
@@ -349,9 +373,10 @@ TOTAL 12.45 €`;
     setPantry(prev => {
       const updated = [...prev];
       recipe.ingredients.forEach(req => {
+        const neededQty = Math.round(req.quantity * factor * 10) / 10;
         const idx = updated.findIndex(p => p.name.toLowerCase().includes(req.name.toLowerCase()) || req.name.toLowerCase().includes(p.name.toLowerCase()));
         if (idx !== -1) {
-          const newQty = Math.max(0, updated[idx].quantity - req.quantity);
+          const newQty = Math.max(0, updated[idx].quantity - neededQty);
           if (newQty === 0) {
             updated.splice(idx, 1);
           } else {
@@ -365,14 +390,19 @@ TOTAL 12.45 €`;
     confetti({ particleCount: 80, spread: 100 });
   };
 
-  // Recipe evaluation: takes ingredients availability + urgency of expiring ingredients
+  // Recipe evaluation: takes scaled ingredients availability + urgency of expiring ingredients
   const evaluateRecipe = (recipe: Recipe) => {
+    const currentServings = getRecipeServings(recipe);
+    const baseServings = recipe.servings || 1;
+    const factor = currentServings / baseServings;
+
     let availableCount = 0;
     let urgentIngredients: { name: string; days: number }[] = [];
 
     recipe.ingredients.forEach(req => {
+      const neededQty = Math.round(req.quantity * factor * 10) / 10;
       const match = pantry.find(p => p.name.toLowerCase().includes(req.name.toLowerCase()) || req.name.toLowerCase().includes(p.name.toLowerCase()));
-      if (match && match.quantity >= req.quantity) {
+      if (match && match.quantity >= neededQty) {
         availableCount++;
         const days = getDaysRemaining(match.expiryDate);
         if (days !== null && days <= 3) {
@@ -989,28 +1019,61 @@ TOTAL 12.45 €`;
                         </div>
                       )}
 
-                      {/* Tags */}
-                      <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" /> {recipe.cookingTimeMinutes} min
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Flame className="w-3.5 h-3.5" /> {recipe.difficulty}
-                        </span>
-                        <span className={`font-semibold ${canCookFully ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {evalResult.availableCount}/{evalResult.totalCount} ingredientes
-                        </span>
+                      {/* Tags & Servings Selector */}
+                      <div className="flex items-center justify-between mt-3 text-xs text-slate-500 flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> {recipe.cookingTimeMinutes} min
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Flame className="w-3.5 h-3.5" /> {recipe.difficulty}
+                          </span>
+                          <span className={`font-semibold ${canCookFully ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {evalResult.availableCount}/{evalResult.totalCount} ing.
+                          </span>
+                        </div>
+
+                        {/* Servings selector */}
+                        <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-xl">
+                          <Users className="w-3.5 h-3.5 text-slate-500 mr-0.5" />
+                          <button
+                            onClick={() => changeRecipeServings(recipe.id, getRecipeServings(recipe) - 1)}
+                            className="w-5 h-5 rounded-md bg-white text-slate-700 hover:bg-slate-200 flex items-center justify-center font-bold text-xs shadow-2xs active:scale-95"
+                            title="Menos comensales"
+                          >
+                            -
+                          </button>
+                          <span className="text-xs font-bold text-slate-800 min-w-6 text-center">
+                            {getRecipeServings(recipe)} {getRecipeServings(recipe) === 1 ? 'pers' : 'pers'}
+                          </span>
+                          <button
+                            onClick={() => changeRecipeServings(recipe.id, getRecipeServings(recipe) + 1)}
+                            className="w-5 h-5 rounded-md bg-white text-slate-700 hover:bg-slate-200 flex items-center justify-center font-bold text-xs shadow-2xs active:scale-95"
+                            title="Más comensales"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
 
                       {/* Ingredients summary */}
                       <div className="mt-3 bg-slate-50 p-2.5 rounded-xl">
-                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                          Ingredientes necesarios:
-                        </p>
+                        <div className="flex justify-between items-center mb-1">
+                          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                            Ingredientes ({getRecipeServings(recipe)} pers.):
+                          </p>
+                          {recipe.servings && recipe.servings !== getRecipeServings(recipe) && (
+                            <span className="text-[10px] text-amber-600 font-medium">
+                              (Ajustado x{(getRecipeServings(recipe) / recipe.servings).toFixed(1)})
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-wrap gap-1.5">
                           {recipe.ingredients.map((ing, i) => {
+                            const factor = getRecipeServings(recipe) / (recipe.servings || 1);
+                            const scaledQty = Math.round(ing.quantity * factor * 10) / 10;
                             const match = pantry.find(p => p.name.toLowerCase().includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(p.name.toLowerCase()));
-                            const hasIt = !!match && match.quantity >= ing.quantity;
+                            const hasIt = !!match && match.quantity >= scaledQty;
                             const daysLeft = match ? getDaysRemaining(match.expiryDate) : null;
 
                             return (
@@ -1024,7 +1087,7 @@ TOTAL 12.45 €`;
                                     : 'bg-rose-100 text-rose-800 line-through'
                                 }`}
                               >
-                                {ing.name} ({ing.quantity} {ing.unit})
+                                {ing.name} ({scaledQty} {ing.unit})
                                 {hasIt && daysLeft !== null && daysLeft <= 3 && (
                                   <span className="text-[9px] text-amber-700 bg-amber-200/60 px-1 rounded">
                                     {daysLeft <= 0 ? 'hoy' : `${daysLeft}d`}
@@ -1046,7 +1109,7 @@ TOTAL 12.45 €`;
                               : 'bg-amber-500 hover:bg-amber-600 text-white'
                           }`}
                         >
-                          <ChefHat className="w-4 h-4" /> Cocinar y descontar ingredientes
+                          <ChefHat className="w-4 h-4" /> Cocinar ({getRecipeServings(recipe)} pers.) y descontar
                         </button>
                       </div>
                     </div>
@@ -1098,14 +1161,24 @@ TOTAL 12.45 €`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Raciones</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newRecipeServings}
+                    onChange={e => setNewRecipeServings(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-600 block mb-1">Tiempo (min)</label>
                   <input
                     type="number"
                     value={newRecipeTime}
                     onChange={e => setNewRecipeTime(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
                 <div>
@@ -1113,7 +1186,7 @@ TOTAL 12.45 €`;
                   <select
                     value={newRecipeDifficulty}
                     onChange={e => setNewRecipeDifficulty(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-1.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
                     <option value="fácil">Fácil</option>
                     <option value="medio">Medio</option>

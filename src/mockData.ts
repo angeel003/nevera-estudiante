@@ -5,6 +5,7 @@ export const INITIAL_RECIPES: Recipe[] = [
     id: 'r1',
     title: 'Tortilla de Patatas Clásica',
     description: 'El clásico infalible de estudiante: nutritivo, barato y delicioso.',
+    servings: 2,
     cookingTimeMinutes: 25,
     difficulty: 'fácil',
     ingredients: [
@@ -25,6 +26,7 @@ export const INITIAL_RECIPES: Recipe[] = [
     id: 'r2',
     title: 'Pasta al Huevo con Tomate y Atún',
     description: 'La comida rápida por excelencia cuando hay prisa entre clases.',
+    servings: 1,
     cookingTimeMinutes: 15,
     difficulty: 'fácil',
     ingredients: [
@@ -43,6 +45,7 @@ export const INITIAL_RECIPES: Recipe[] = [
     id: 'r3',
     title: 'Arroz Salteado con Pollo y Verduras',
     description: 'Perfecto para aprovechar restos de verduras y pechuga.',
+    servings: 1,
     cookingTimeMinutes: 20,
     difficulty: 'fácil',
     ingredients: [
@@ -63,6 +66,7 @@ export const INITIAL_RECIPES: Recipe[] = [
     id: 'r4',
     title: 'Tostada de Aguacate y Huevo Poché / Frito',
     description: 'Desayuno o cena ligera, saludable y lista en 5 minutos.',
+    servings: 1,
     cookingTimeMinutes: 8,
     difficulty: 'fácil',
     ingredients: [
