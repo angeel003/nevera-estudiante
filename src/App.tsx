@@ -27,12 +27,14 @@ import {
   Edit2,
   Store,
   PauseCircle,
-  Save
+  Save,
+  Share2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { PantryItem, ShoppingItem, Recipe, Category, Supermarket, TicketReviewItem, TicketSession } from './types';
 import { INITIAL_RECIPES, guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
 import { parseReceiptText } from './receiptParser';
+import { extractTextFromPdf } from './pdfParser';
 
 const STORAGE_KEY_PANTRY = 'estudiante_app_pantry';
 const STORAGE_KEY_SHOPPING = 'estudiante_app_shopping';
@@ -167,6 +169,53 @@ export default function App() {
 
   // Editing existing item inside pantry
   const [editingPantryItem, setEditingPantryItem] = useState<PantryItem | null>(null);
+
+  // Loading state when parsing PDF or shared files
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+
+  // Listen for Shared Ticket files from Web Share Target API
+  useEffect(() => {
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(err => {
+        console.error('Service worker registration failed:', err);
+      });
+    }
+
+    // Check if opened via share target
+    const checkSharedTickets = async () => {
+      try {
+        if ('caches' in window) {
+          const cache = await caches.open('shared-ticket-cache');
+          const fileResp = await cache.match('/shared-ticket-file');
+          if (fileResp) {
+            const blob = await fileResp.blob();
+            const fileName = decodeURIComponent(fileResp.headers.get('x-file-name') || 'ticket');
+            await cache.delete('/shared-ticket-file');
+            
+            const file = new File([blob], fileName, { type: blob.type });
+            setActiveTab('ticket');
+            await handleProcessTicketFile(file);
+            return;
+          }
+
+          const textResp = await cache.match('/shared-ticket-text');
+          if (textResp) {
+            const data = await textResp.json();
+            await cache.delete('/shared-ticket-text');
+            if (data.text || data.title) {
+              setActiveTab('ticket');
+              startTicketSession(`${data.title || ''}\n${data.text || ''}`, null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error reading shared ticket cache:', err);
+      }
+    };
+
+    checkSharedTickets();
+  }, []);
 
   // Sync ticket draft session to localStorage
   useEffect(() => {
@@ -396,15 +445,25 @@ TOTAL 15.55 €`;
     startTicketSession(demo, null);
   };
 
-  // Image upload simulation
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const previewUrl = reader.result as string;
-        // Simular lectura de OCR y arrancar sesión
-        const demo = `MERCADONA S.A.
+  // Unified file processor for image and PDF receipts
+  const handleProcessTicketFile = async (file: File) => {
+    setIsProcessingFile(true);
+    try {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        // Extract real text from digital PDF receipt (Día, Carrefour, Mercadona e-tickets)
+        const pdfText = await extractTextFromPdf(file);
+        if (pdfText.trim().length > 10) {
+          startTicketSession(pdfText, null);
+        } else {
+          // If scanned PDF without text layer, fallback to demo/OCR
+          handleLoadDemoTicket();
+        }
+      } else {
+        // Image ticket (photo or gallery screenshot)
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const previewUrl = reader.result as string;
+          const demo = `MERCADONA S.A.
 1 HUEVOS CAMPEROS L 12U 2.45
 2 LECHE ENTERA 1L 1.95
 1 PLATANO DE CANARIAS 1.80
@@ -413,9 +472,23 @@ TOTAL 15.55 €`;
 1 PASTA MACARRONES 500G 0.90
 1 PAPEL HIGIENICO 12R 3.10
 TOTAL 15.55 €`;
-        startTicketSession(demo, previewUrl);
-      };
-      reader.readAsDataURL(file);
+          startTicketSession(demo, previewUrl);
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      console.error('Error processing ticket file:', err);
+      alert('Hubo un problema al leer el archivo. Inténtalo de nuevo.');
+    } finally {
+      setIsProcessingFile(false);
+    }
+  };
+
+  // Image/PDF upload handler
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await handleProcessTicketFile(file);
     }
   };
 
@@ -1234,19 +1307,29 @@ TOTAL 15.55 €`;
                   </select>
                 </div>
 
-                {/* Upload button */}
-                <div className="pt-1">
+                {/* Upload or PDF digital ticket button */}
+                <div className="pt-1 space-y-2">
                   <label className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl cursor-pointer font-medium text-sm transition shadow-xs">
                     <Upload className="w-4 h-4" />
-                    <span>Subir foto de ticket</span>
+                    <span>{isProcessingFile ? 'Leyendo ticket...' : 'Subir foto o PDF del ticket'}</span>
                     <input
                       type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handleImageUpload}
+                      accept="image/*,application/pdf,.pdf"
+                      onChange={handleFileInputChange}
                       className="hidden"
+                      disabled={isProcessingFile}
                     />
                   </label>
+
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-2.5 text-xs text-left flex items-start gap-2">
+                    <Share2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block">¿Usas la app de Día, Mercadona o Carrefour?</strong>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">
+                        Puedes darle a <strong>"Compartir ticket"</strong> directamente en su app y elegir <strong>MyFridge</strong>, o descargar el PDF y subirlo aquí arriba.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="relative flex py-1 items-center">
