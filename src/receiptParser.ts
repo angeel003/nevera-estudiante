@@ -2,6 +2,7 @@ import type { PantryItem } from './types';
 import { guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
 
 export interface ParsedTicketItem {
+  rawText: string;
   name: string;
   quantity: number;
   unit: string;
@@ -65,6 +66,7 @@ export function parseReceiptText(text: string): ParsedTicketItem[] {
 
     if (name.length > 2) {
       items.push({
+        rawText: trimmed,
         name,
         quantity: qty,
         unit: guessUnit(name),

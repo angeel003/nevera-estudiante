@@ -23,16 +23,21 @@ import {
   UtensilsCrossed,
   Activity,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Edit2,
+  Store,
+  PauseCircle,
+  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import type { PantryItem, ShoppingItem, Recipe, Category } from './types';
+import type { PantryItem, ShoppingItem, Recipe, Category, Supermarket, TicketReviewItem, TicketSession } from './types';
 import { INITIAL_RECIPES, guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
-import { parseReceiptText, convertToPantryItem, type ParsedTicketItem } from './receiptParser';
+import { parseReceiptText } from './receiptParser';
 
 const STORAGE_KEY_PANTRY = 'estudiante_app_pantry';
 const STORAGE_KEY_SHOPPING = 'estudiante_app_shopping';
 const STORAGE_KEY_RECIPES = 'estudiante_app_recipes';
+const STORAGE_KEY_TICKET_DRAFT = 'estudiante_app_ticket_session';
 
 const CATEGORIES: { id: Category | 'todos'; label: string; emoji: string }[] = [
   { id: 'todos', label: 'Todos', emoji: '✨' },
@@ -140,9 +145,37 @@ export default function App() {
   const [quickPantryNotes, setQuickPantryNotes] = useState<string>('');
   const [showAdvancedPantryForm, setShowAdvancedPantryForm] = useState(false);
 
-  // Ticket scan state
-  const [previewItems, setPreviewItems] = useState<ParsedTicketItem[]>([]);
-  const [ticketImagePreview, setTicketImagePreview] = useState<string | null>(null);
+  // Ticket scan & review session state (persisted so user can leave and resume anytime)
+  const [ticketSession, setTicketSession] = useState<TicketSession | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_TICKET_DRAFT);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return null;
+  });
+
+  const [selectedSupermarket, setSelectedSupermarket] = useState<Supermarket>('mercadona');
+  const [editingReviewItemId, setEditingReviewItemId] = useState<string | null>(null);
+
+  // New manual item inside ticket review
+  const [showAddTicketItemModal, setShowAddTicketItemModal] = useState(false);
+  const [manualTicketItemName, setManualTicketItemName] = useState('');
+  const [manualTicketItemQty, setManualTicketItemQty] = useState(1);
+  const [manualTicketItemUnit, setManualTicketItemUnit] = useState('uds');
+  const [manualTicketItemCategory, setManualTicketItemCategory] = useState<Category>('otros');
+  const [manualTicketItemPrice, setManualTicketItemPrice] = useState('');
+
+  // Editing existing item inside pantry
+  const [editingPantryItem, setEditingPantryItem] = useState<PantryItem | null>(null);
+
+  // Sync ticket draft session to localStorage
+  useEffect(() => {
+    if (ticketSession) {
+      localStorage.setItem(STORAGE_KEY_TICKET_DRAFT, JSON.stringify(ticketSession));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_TICKET_DRAFT);
+    }
+  }, [ticketSession]);
 
   // Sync to localStorage
   useEffect(() => {
@@ -324,6 +357,31 @@ export default function App() {
     confetti({ particleCount: 60, spread: 70 });
   };
 
+  // Initialize a ticket review session from parsed items
+  const startTicketSession = (rawText: string, imagePreview?: string | null) => {
+    const parsed = parseReceiptText(rawText);
+    const reviewItems: TicketReviewItem[] = parsed.map((item, index) => ({
+      id: 'rev_' + Date.now() + '_' + index,
+      rawText: item.rawText || item.name,
+      name: item.name,
+      category: guessCategory(item.name),
+      quantity: item.quantity,
+      unit: item.unit,
+      price: item.price,
+      expiryDate: getDefaultExpiryDate(item.name),
+      isFrozen: false,
+      status: 'pending'
+    }));
+
+    setTicketSession({
+      id: 'sess_' + Date.now(),
+      supermarket: selectedSupermarket,
+      createdAt: new Date().toISOString(),
+      imagePreview: imagePreview || null,
+      items: reviewItems
+    });
+  };
+
   // Process Mock / Demo Ticket
   const handleLoadDemoTicket = () => {
     const demo = `MERCADONA S.A.
@@ -333,9 +391,9 @@ export default function App() {
 1 PECHUGA POLLO FILETES 4.50
 1 TOMATE FRITO BRICK 0.85
 1 PASTA MACARRONES 500G 0.90
-TOTAL 12.45 €`;
-    const parsed = parseReceiptText(demo);
-    setPreviewItems(parsed);
+1 PAPEL HIGIENICO 12R 3.10
+TOTAL 15.55 €`;
+    startTicketSession(demo, null);
   };
 
   // Image upload simulation
@@ -344,34 +402,146 @@ TOTAL 12.45 €`;
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setTicketImagePreview(reader.result as string);
-        handleLoadDemoTicket();
+        const previewUrl = reader.result as string;
+        // Simular lectura de OCR y arrancar sesión
+        const demo = `MERCADONA S.A.
+1 HUEVOS CAMPEROS L 12U 2.45
+2 LECHE ENTERA 1L 1.95
+1 PLATANO DE CANARIAS 1.80
+1 PECHUGA POLLO FILETES 4.50
+1 TOMATE FRITO BRICK 0.85
+1 PASTA MACARRONES 500G 0.90
+1 PAPEL HIGIENICO 12R 3.10
+TOTAL 15.55 €`;
+        startTicketSession(demo, previewUrl);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Add all detected items from ticket to pantry
-  const handleAddTicketItemsToPantry = () => {
-    if (previewItems.length === 0) return;
+  // Update a single item inside ticket review
+  const updateTicketReviewItem = (id: string, updates: Partial<TicketReviewItem>) => {
+    if (!ticketSession) return;
+    setTicketSession({
+      ...ticketSession,
+      items: ticketSession.items.map(item => item.id === id ? { ...item, ...updates } : item)
+    });
+  };
 
-    const newItems = previewItems.map(item => convertToPantryItem(item));
-    setPantry(prev => [...newItems, ...prev]);
+  // Toggle verified status for an item
+  const toggleItemVerified = (id: string) => {
+    if (!ticketSession) return;
+    setTicketSession({
+      ...ticketSession,
+      items: ticketSession.items.map(item => {
+        if (item.id === id) {
+          const nextStatus = item.status === 'verified' ? 'pending' : 'verified';
+          return { ...item, status: nextStatus };
+        }
+        return item;
+      })
+    });
+  };
 
+  // Discard an item from ticket review (e.g. non-food item)
+  const discardTicketReviewItem = (id: string) => {
+    if (!ticketSession) return;
+    setTicketSession({
+      ...ticketSession,
+      items: ticketSession.items.filter(item => item.id !== id)
+    });
+  };
+
+  // Add manual missing item to ticket review
+  const handleAddManualItemToTicket = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketSession || !manualTicketItemName.trim()) return;
+
+    const price = manualTicketItemPrice ? parseFloat(manualTicketItemPrice.replace(',', '.')) : undefined;
+
+    const newItem: TicketReviewItem = {
+      id: 'rev_' + Date.now(),
+      rawText: 'Añadido manualmente',
+      name: manualTicketItemName.trim(),
+      category: manualTicketItemCategory === 'otros' ? guessCategory(manualTicketItemName) : manualTicketItemCategory,
+      quantity: Number(manualTicketItemQty) || 1,
+      unit: manualTicketItemUnit || guessUnit(manualTicketItemName),
+      price: isNaN(price || 0) ? undefined : price,
+      expiryDate: getDefaultExpiryDate(manualTicketItemName),
+      isFrozen: false,
+      status: 'verified'
+    };
+
+    setTicketSession({
+      ...ticketSession,
+      items: [...ticketSession.items, newItem]
+    });
+
+    setManualTicketItemName('');
+    setManualTicketItemQty(1);
+    setManualTicketItemPrice('');
+    setShowAddTicketItemModal(false);
+  };
+
+  // Add only verified items or all remaining items from ticket to pantry
+  const handleFinalizeTicket = (onlyVerified = false) => {
+    if (!ticketSession) return;
+
+    const toImport = onlyVerified
+      ? ticketSession.items.filter(i => i.status === 'verified')
+      : ticketSession.items.filter(i => i.status !== 'discarded');
+
+    if (toImport.length === 0) {
+      alert('No hay alimentos seleccionados para guardar en la nevera.');
+      return;
+    }
+
+    const newPantryItems: PantryItem[] = toImport.map(item => ({
+      id: 'pantry_' + Date.now() + Math.random().toString(36).substring(2, 6),
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unit,
+      price: item.price,
+      expiryDate: item.expiryDate || getDefaultExpiryDate(item.name),
+      isFrozen: item.isFrozen,
+      addedAt: new Date().toISOString(),
+    }));
+
+    setPantry(prev => [...newPantryItems, ...prev]);
+
+    // Also auto-complete from shopping list
     setShoppingList(prev =>
       prev.filter(shopItem => {
-        const foundInTicket = previewItems.some(
+        const found = toImport.some(
           p => p.name.toLowerCase().includes(shopItem.name.toLowerCase()) ||
                shopItem.name.toLowerCase().includes(p.name.toLowerCase())
         );
-        return !foundInTicket;
+        return !found;
       })
     );
 
-    setPreviewItems([]);
-    setTicketImagePreview(null);
-    setActiveTab('frigo');
-    confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+    // If importing only verified, keep remaining in session for later!
+    if (onlyVerified && toImport.length < ticketSession.items.length) {
+      setTicketSession({
+        ...ticketSession,
+        items: ticketSession.items.filter(i => i.status !== 'verified')
+      });
+      alert(`¡Se han añadido ${toImport.length} alimentos a tu nevera! El resto sigue guardado aquí para cuando quieras revisarlo.`);
+    } else {
+      setTicketSession(null);
+      localStorage.removeItem(STORAGE_KEY_TICKET_DRAFT);
+      setActiveTab('frigo');
+      confetti({ particleCount: 75, spread: 80, origin: { y: 0.6 } });
+    }
+  };
+
+  // Cancel / discard whole ticket session
+  const handleDiscardTicketSession = () => {
+    if (window.confirm('¿Quieres descartar esta revisión del ticket? Se borrarán los productos pendientes de este ticket.')) {
+      setTicketSession(null);
+      localStorage.removeItem(STORAGE_KEY_TICKET_DRAFT);
+    }
   };
 
   // Get current selected servings for a recipe (defaults to recipe.servings || 1)
@@ -884,27 +1054,35 @@ TOTAL 12.45 €`;
                         </div>
                       </div>
 
-                      {/* Quick controls: - / + / delete */}
-                      <div className="flex items-center gap-1.5">
+                      {/* Quick controls: - / + / edit / delete */}
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => updatePantryQuantity(item.id, -1)}
                           title="Gastar 1"
-                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                          className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-xs active:scale-95 transition"
                         >
-                          <Minus className="w-3.5 h-3.5" />
+                          <Minus className="w-3 h-3" />
                         </button>
                         <button
                           onClick={() => updatePantryQuantity(item.id, 1)}
                           title="Sumar 1"
-                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-sm active:scale-95 transition"
+                          className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-xs active:scale-95 transition"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => setEditingPantryItem({ ...item })}
+                          title="Modificar alimento"
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center active:scale-95 transition ml-0.5"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => removePantryItem(item.id)}
-                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition ml-1"
+                          title="Eliminar"
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -1019,104 +1197,315 @@ TOTAL 12.45 €`;
           </div>
         )}
 
-        {/* TAB 3: SUBIR TICKET DE COMPRA */}
+        {/* TAB 3: SUBIR Y REVISAR TICKET DE COMPRA */}
         {activeTab === 'ticket' && (
           <div className="space-y-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center space-y-3">
-              <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
-                <Camera className="w-6 h-6" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-800">Escanear Ticket de Compra</h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  Lee productos, precios y calcula fechas de caducidad estimadas de tu compra.
-                </p>
-              </div>
-
-              {/* Upload button */}
-              <div className="pt-2">
-                <label className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl cursor-pointer font-medium text-sm transition shadow-xs">
-                  <Upload className="w-4 h-4" />
-                  <span>Subir foto de ticket</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-2 text-xs text-slate-400 uppercase font-medium">o prueba un ejemplo</span>
-                <div className="flex-grow border-t border-slate-200"></div>
-              </div>
-
-              <button
-                onClick={handleLoadDemoTicket}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold py-2 rounded-xl transition"
-              >
-                Cargar ticket de ejemplo (Mercadona)
-              </button>
-            </div>
-
-            {/* Preview of Photo if uploaded */}
-            {ticketImagePreview && (
-              <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                <p className="text-xs font-medium text-slate-500 mb-2">Foto capturada:</p>
-                <img
-                  src={ticketImagePreview}
-                  alt="Ticket preview"
-                  className="w-full max-h-48 object-cover rounded-xl border border-slate-200"
-                />
-              </div>
-            )}
-
-            {/* Detected Items from Ticket */}
-            {previewItems.length > 0 && (
-              <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
-                    <span>Detectados {previewItems.length} alimentos</span>
-                  </div>
-                  <span className="text-xs font-semibold text-emerald-700">
-                    Total: {previewItems.reduce((acc, i) => acc + (i.price || 0), 0).toFixed(2)}€
-                  </span>
+            {/* If no active ticket session, show camera / upload launcher */}
+            {!ticketSession ? (
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center space-y-3">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
+                  <Camera className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Escanear Ticket de Compra</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Sube la foto del ticket. Podrás revisar línea por línea, corregir lo que quieras o dejar la revisión a medias para continuar luego.
+                  </p>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {previewItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200"
-                    >
-                      <div>
-                        <span className="font-semibold text-slate-800">{item.name}</span>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          Caducidad aprox: {getDefaultExpiryDate(item.name)}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        {item.price && (
-                          <div className="font-bold text-emerald-700">{item.price.toFixed(2)}€</div>
-                        )}
-                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-medium text-[10px]">
-                          {item.quantity} {item.unit}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                {/* Supermarket selector */}
+                <div className="pt-1 text-left bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1 flex items-center gap-1">
+                    <Store className="w-3.5 h-3.5 text-emerald-600" />
+                    Supermercado del ticket:
+                  </label>
+                  <select
+                    value={selectedSupermarket}
+                    onChange={e => setSelectedSupermarket(e.target.value as Supermarket)}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value="mercadona">🛒 Mercadona</option>
+                    <option value="carrefour">🛒 Carrefour</option>
+                    <option value="lidl">🛒 Lidl</option>
+                    <option value="dia">🛒 Día</option>
+                    <option value="alcampo">🛒 Alcampo</option>
+                    <option value="eroski">🛒 Eroski</option>
+                    <option value="otro">🏪 Otro supermercado</option>
+                  </select>
+                </div>
+
+                {/* Upload button */}
+                <div className="pt-1">
+                  <label className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl cursor-pointer font-medium text-sm transition shadow-xs">
+                    <Upload className="w-4 h-4" />
+                    <span>Subir foto de ticket</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-200"></div>
+                  <span className="flex-shrink mx-2 text-xs text-slate-400 uppercase font-medium">o prueba un ejemplo</span>
+                  <div className="flex-grow border-t border-slate-200"></div>
                 </div>
 
                 <button
-                  onClick={handleAddTicketItemsToPantry}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 shadow-xs"
+                  onClick={handleLoadDemoTicket}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold py-2 rounded-xl transition"
                 >
-                  <Check className="w-4 h-4" /> Añadir todo a mi nevera con caducidades
+                  Cargar ticket de ejemplo (Mercadona)
                 </button>
+              </div>
+            ) : (
+              /* ACTIVE TICKET REVIEW WORKSPACE */
+              <div className="space-y-3">
+                {/* Header of review */}
+                <div className="bg-gradient-to-r from-emerald-700 to-teal-800 text-white p-3.5 rounded-2xl shadow-sm flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-200">Revisión en progreso</span>
+                    <h2 className="text-sm font-bold flex items-center gap-1.5 mt-0.5">
+                      <span>🛒 Ticket de {ticketSession.supermarket.toUpperCase()}</span>
+                    </h2>
+                    <p className="text-[11px] text-emerald-100 mt-0.5">
+                      {ticketSession.items.filter(i => i.status === 'verified').length} de {ticketSession.items.length} verificados
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setShowAddTicketItemModal(true)}
+                      className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl text-xs font-semibold transition"
+                      title="Añadir alimento no detectado"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleDiscardTicketSession}
+                      className="bg-red-500/30 hover:bg-red-500/50 text-white p-2 rounded-xl text-xs font-semibold transition"
+                      title="Descartar este ticket"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress bar and instructions */}
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-2.5 text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <PauseCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      Puedes salir cuando quieras: <strong>se guarda automáticamente</strong> para seguir más tarde.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Photo preview if present */}
+                {ticketSession.imagePreview && (
+                  <div className="bg-white p-2.5 rounded-2xl border border-slate-200">
+                    <p className="text-[10px] font-semibold text-slate-500 mb-1">Foto original:</p>
+                    <img
+                      src={ticketSession.imagePreview}
+                      alt="Ticket"
+                      className="w-full max-h-36 object-cover rounded-xl border border-slate-100"
+                    />
+                  </div>
+                )}
+
+                {/* Ticket items list with side-by-side verification and inline edit */}
+                <div className="space-y-2">
+                  {ticketSession.items.map((item) => {
+                    const isEditing = editingReviewItemId === item.id;
+                    const isVerified = item.status === 'verified';
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`bg-white p-3 rounded-2xl border transition shadow-2xs space-y-2 ${
+                          isVerified ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'
+                        }`}
+                      >
+                        {/* Top: Raw OCR Text vs Interpreted Product Name */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                              <span>Texto ticket:</span>
+                              <span className="bg-slate-100 px-1 py-0.2 rounded font-semibold text-slate-600">
+                                {item.rawText}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <h3 className="font-bold text-slate-800 text-sm">{item.name}</h3>
+                              {item.price && (
+                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                                  {item.price.toFixed(2)}€
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {item.quantity} {item.unit} • {item.category} • Caduca aprox: {item.expiryDate || 'N/A'}
+                            </p>
+                          </div>
+
+                          {/* Quick action buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => toggleItemVerified(item.id)}
+                              title={isVerified ? 'Marcar como pendiente' : 'Verificar y marcar como correcto'}
+                              className={`p-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                                isVerified
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700'
+                              }`}
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingReviewItemId(isEditing ? null : item.id)}
+                              title="Editar datos de este producto"
+                              className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => discardTicketReviewItem(item.id)}
+                              title="Eliminar (no es comida)"
+                              className="p-1.5 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Inline Editor if active */}
+                        {isEditing && (
+                          <div className="pt-2 border-t border-slate-100 bg-slate-50 p-2.5 rounded-xl space-y-2 text-xs">
+                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                              Corregir producto:
+                            </p>
+                            <div>
+                              <span className="text-[10px] text-slate-500 block mb-0.5">Nombre real del alimento:</span>
+                              <input
+                                type="text"
+                                value={item.name}
+                                onChange={e => updateTicketReviewItem(item.id, { name: e.target.value })}
+                                className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <div>
+                                <span className="text-[10px] text-slate-500 block mb-0.5">Cantidad:</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={e => updateTicketReviewItem(item.id, { quantity: Number(e.target.value) || 1 })}
+                                  className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-center"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 block mb-0.5">Unidad:</span>
+                                <select
+                                  value={item.unit}
+                                  onChange={e => updateTicketReviewItem(item.id, { unit: e.target.value })}
+                                  className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs"
+                                >
+                                  <option value="uds">uds</option>
+                                  <option value="g">g</option>
+                                  <option value="kg">kg</option>
+                                  <option value="L">L</option>
+                                  <option value="ml">ml</option>
+                                  <option value="tupper">tupper</option>
+                                  <option value="paquete">paq.</option>
+                                </select>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 block mb-0.5">Precio (€):</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.price || ''}
+                                  onChange={e => updateTicketReviewItem(item.id, { price: parseFloat(e.target.value) || undefined })}
+                                  className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-center"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <div>
+                                <span className="text-[10px] text-slate-500 block mb-0.5">Categoría:</span>
+                                <select
+                                  value={item.category}
+                                  onChange={e => updateTicketReviewItem(item.id, { category: e.target.value as Category })}
+                                  className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs"
+                                >
+                                  <option value="carne-pescado">🥩 Carne/Pescado</option>
+                                  <option value="fruta-verdura">🍎 Fruta/Verdura</option>
+                                  <option value="lacteos">🧀 Lácteos</option>
+                                  <option value="despensa">🥫 Despensa</option>
+                                  <option value="congelados">🧊 Congelados</option>
+                                  <option value="comida-preparada">🍱 Preparada</option>
+                                  <option value="bebidas">🧃 Bebidas</option>
+                                  <option value="otros">🍽️ Otros</option>
+                                </select>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 block mb-0.5">Caducidad:</span>
+                                <input
+                                  type="date"
+                                  value={item.expiryDate || ''}
+                                  onChange={e => updateTicketReviewItem(item.id, { expiryDate: e.target.value })}
+                                  className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-[11px]"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                updateTicketReviewItem(item.id, { status: 'verified' });
+                                setEditingReviewItemId(null);
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 rounded-lg text-xs mt-1 transition"
+                            >
+                              Guardar cambios y verificar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Finalize options bar */}
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2 pt-3">
+                  <div className="flex gap-2">
+                    {/* Guardar solo los verificados si hay pendientes */}
+                    {ticketSession.items.some(i => i.status === 'verified') && (
+                      <button
+                        onClick={() => handleFinalizeTicket(true)}
+                        className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-2.5 rounded-xl font-bold text-xs transition shadow-xs flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4" /> Guardar solo verificados ({ticketSession.items.filter(i => i.status === 'verified').length})
+                      </button>
+                    )}
+
+                    {/* Guardar todos los alimentos */}
+                    <button
+                      onClick={() => handleFinalizeTicket(false)}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-xs transition shadow-xs flex items-center justify-center gap-1.5"
+                    >
+                      <Save className="w-4 h-4" /> Guardar todo ({ticketSession.items.length}) en la nevera
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-center text-slate-400">
+                    💡 Los productos no verificados quedarán guardados aquí si eliges guardar solo los listos.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -1442,6 +1831,277 @@ TOTAL 12.45 €`;
         </div>
       )}
 
+      {/* MODAL: EDITAR ALIMENTO EXISTENTE DE LA NEVERA */}
+      {editingPantryItem && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-emerald-600" /> Modificar Alimento
+              </h3>
+              <button
+                onClick={() => setEditingPantryItem(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setPantry(prev => prev.map(item => item.id === editingPantryItem.id ? editingPantryItem : item));
+                setEditingPantryItem(null);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="text-slate-600 font-semibold block mb-1">Nombre</label>
+                <input
+                  type="text"
+                  value={editingPantryItem.name}
+                  onChange={e => setEditingPantryItem({ ...editingPantryItem, name: e.target.value })}
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingPantryItem.quantity}
+                    onChange={e => setEditingPantryItem({ ...editingPantryItem, quantity: Number(e.target.value) || 1 })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-center text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Unidad</label>
+                  <select
+                    value={editingPantryItem.unit}
+                    onChange={e => setEditingPantryItem({ ...editingPantryItem, unit: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs"
+                  >
+                    <option value="uds">uds</option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="ml">ml</option>
+                    <option value="L">L</option>
+                    <option value="tupper">tupper</option>
+                    <option value="raciones">raciones</option>
+                    <option value="paquete">paq.</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Precio (€)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingPantryItem.price ?? ''}
+                    onChange={e => setEditingPantryItem({ ...editingPantryItem, price: parseFloat(e.target.value) || undefined })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-center text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Categoría</label>
+                  <select
+                    value={editingPantryItem.category}
+                    onChange={e => setEditingPantryItem({ ...editingPantryItem, category: e.target.value as Category })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs"
+                  >
+                    <option value="comida-preparada">🍱 Tupper/Preparada</option>
+                    <option value="congelados">🧊 Congelados</option>
+                    <option value="carne-pescado">🥩 Carne/Pescado</option>
+                    <option value="fruta-verdura">🍎 Fruta/Verdura</option>
+                    <option value="lacteos">🧀 Lácteos</option>
+                    <option value="despensa">🥫 Despensa</option>
+                    <option value="bebidas">🧃 Bebidas</option>
+                    <option value="otros">🍽️ Otros</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Caducidad</label>
+                  <input
+                    type="date"
+                    value={editingPantryItem.expiryDate || ''}
+                    onChange={e => setEditingPantryItem({ ...editingPantryItem, expiryDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-[11px]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setEditingPantryItem({ ...editingPantryItem, isFrozen: !editingPantryItem.isFrozen })}
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition ${
+                    editingPantryItem.isFrozen
+                      ? 'bg-sky-100 text-sky-800 border-sky-300'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <Snowflake className="w-3.5 h-3.5" /> Congelador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingPantryItem({ ...editingPantryItem, isPreparedMeal: !editingPantryItem.isPreparedMeal })}
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition ${
+                    editingPantryItem.isPreparedMeal
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5" /> Tupper / Listo
+                </button>
+              </div>
+
+              <div>
+                <label className="text-slate-600 font-semibold block mb-1">Notas / Observaciones</label>
+                <input
+                  type="text"
+                  value={editingPantryItem.notes || ''}
+                  onChange={e => setEditingPantryItem({ ...editingPantryItem, notes: e.target.value })}
+                  placeholder="Ej: Descongelar antes, tupper de mamá..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingPantryItem(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-semibold transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold transition shadow-xs"
+                >
+                  Guardar cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: AÑADIR ALIMENTO FALTANTE AL TICKET */}
+      {showAddTicketItemModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-600" /> Añadir alimento que faltó
+              </h3>
+              <button
+                onClick={() => setShowAddTicketItemModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddManualItemToTicket} className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-600 font-semibold block mb-1">Nombre del producto</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Queso gouda, Plátanos..."
+                  value={manualTicketItemName}
+                  onChange={e => {
+                    setManualTicketItemName(e.target.value);
+                    if (e.target.value.length > 2) {
+                      setManualTicketItemCategory(guessCategory(e.target.value));
+                      setManualTicketItemUnit(guessUnit(e.target.value));
+                    }
+                  }}
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={manualTicketItemQty}
+                    onChange={e => setManualTicketItemQty(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-center text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Unidad</label>
+                  <select
+                    value={manualTicketItemUnit}
+                    onChange={e => setManualTicketItemUnit(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs"
+                  >
+                    <option value="uds">uds</option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="L">L</option>
+                    <option value="ml">ml</option>
+                    <option value="tupper">tupper</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-600 font-semibold block mb-1">Precio (€)</label>
+                  <input
+                    type="text"
+                    placeholder="1.50"
+                    value={manualTicketItemPrice}
+                    onChange={e => setManualTicketItemPrice(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-center text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-600 font-semibold block mb-1">Categoría</label>
+                <select
+                  value={manualTicketItemCategory}
+                  onChange={e => setManualTicketItemCategory(e.target.value as Category)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs"
+                >
+                  <option value="carne-pescado">🥩 Carne/Pescado</option>
+                  <option value="fruta-verdura">🍎 Fruta/Verdura</option>
+                  <option value="lacteos">🧀 Lácteos</option>
+                  <option value="despensa">🥫 Despensa</option>
+                  <option value="congelados">🧊 Congelados</option>
+                  <option value="comida-preparada">🍱 Preparada</option>
+                  <option value="bebidas">🧃 Bebidas</option>
+                  <option value="otros">🍽️ Otros</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTicketItemModal(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-semibold transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold transition shadow-xs"
+                >
+                  Añadir al ticket
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Mobile Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-200 flex justify-around py-2 px-1 z-30 shadow-lg">
         <button
@@ -1471,12 +2131,17 @@ TOTAL 12.45 €`;
 
         <button
           onClick={() => setActiveTab('ticket')}
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition ${
+          className={`flex flex-col items-center py-1 px-3 rounded-xl transition relative ${
             activeTab === 'ticket' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'
           }`}
         >
           <ScanLine className="w-5 h-5" />
           <span className="text-[11px] mt-1">Ticket OCR</span>
+          {ticketSession && ticketSession.items.length > 0 && (
+            <span className="absolute top-1 right-2 w-4 h-4 bg-amber-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+              {ticketSession.items.length}
+            </span>
+          )}
         </button>
 
         <button

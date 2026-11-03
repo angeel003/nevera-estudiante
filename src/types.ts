@@ -55,3 +55,26 @@ export interface Recipe {
   }[];
   steps: string[];
 }
+
+export type Supermarket = 'mercadona' | 'carrefour' | 'lidl' | 'dia' | 'alcampo' | 'eroski' | 'otro';
+
+export interface TicketReviewItem {
+  id: string;
+  rawText: string; // El texto crudo leído del ticket (ej: "HUEV.CAMP.L 12U 2.45")
+  name: string; // Nombre normalizado que se guardará (ej: "Huevos Camperos")
+  category: Category;
+  quantity: number;
+  unit: string;
+  price?: number;
+  expiryDate?: string;
+  isFrozen?: boolean;
+  status: 'pending' | 'verified' | 'discarded'; // estado de revisión
+}
+
+export interface TicketSession {
+  id: string;
+  supermarket: Supermarket;
+  createdAt: string;
+  imagePreview?: string | null;
+  items: TicketReviewItem[];
+}
