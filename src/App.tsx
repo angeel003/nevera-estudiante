@@ -18,7 +18,12 @@ import {
   ArrowRight,
   AlertTriangle,
   X,
-  Users
+  Users,
+  Snowflake,
+  UtensilsCrossed,
+  Activity,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { PantryItem, ShoppingItem, Recipe, Category } from './types';
@@ -31,12 +36,13 @@ const STORAGE_KEY_RECIPES = 'estudiante_app_recipes';
 
 const CATEGORIES: { id: Category | 'todos'; label: string; emoji: string }[] = [
   { id: 'todos', label: 'Todos', emoji: '✨' },
+  { id: 'comida-preparada', label: 'Tuppers / Preparada', emoji: '🍱' },
+  { id: 'congelados', label: 'Congelador', emoji: '🧊' },
   { id: 'carne-pescado', label: 'Carne / Pescado', emoji: '🥩' },
   { id: 'fruta-verdura', label: 'Fruta / Verdura', emoji: '🍎' },
   { id: 'lacteos', label: 'Lácteos / Huevos', emoji: '🧀' },
   { id: 'despensa', label: 'Despensa / Pasta', emoji: '🥫' },
   { id: 'bebidas', label: 'Bebidas', emoji: '🧃' },
-  { id: 'congelados', label: 'Congelados', emoji: '🧊' },
 ];
 
 export default function App() {
@@ -121,9 +127,18 @@ export default function App() {
   
   const [quickPantryName, setQuickPantryName] = useState('');
   const [quickPantryQty, setQuickPantryQty] = useState(1);
+  const [quickPantryUnit, setQuickPantryUnit] = useState<string>('uds');
   const [quickPantryCategory, setQuickPantryCategory] = useState<Category>('otros');
   const [quickPantryPrice, setQuickPantryPrice] = useState<string>('');
   const [quickPantryExpiry, setQuickPantryExpiry] = useState<string>('');
+  const [quickPantryIsFrozen, setQuickPantryIsFrozen] = useState(false);
+  const [quickPantryIsPrepared, setQuickPantryIsPrepared] = useState(false);
+  const [quickPantryCalories, setQuickPantryCalories] = useState<string>('');
+  const [quickPantryProtein, setQuickPantryProtein] = useState<string>('');
+  const [quickPantryCarbs, setQuickPantryCarbs] = useState<string>('');
+  const [quickPantryFat, setQuickPantryFat] = useState<string>('');
+  const [quickPantryNotes, setQuickPantryNotes] = useState<string>('');
+  const [showAdvancedPantryForm, setShowAdvancedPantryForm] = useState(false);
 
   // Ticket scan state
   const [previewItems, setPreviewItems] = useState<ParsedTicketItem[]>([]);
@@ -198,25 +213,49 @@ export default function App() {
     if (!quickPantryName.trim()) return;
 
     const price = quickPantryPrice ? parseFloat(quickPantryPrice.replace(',', '.')) : undefined;
-    const cat = quickPantryCategory === 'otros' ? guessCategory(quickPantryName) : quickPantryCategory;
-    const expiry = quickPantryExpiry || getDefaultExpiryDate(quickPantryName);
+    let cat = quickPantryCategory === 'otros' ? guessCategory(quickPantryName) : quickPantryCategory;
+    if (quickPantryIsPrepared && cat === 'otros') cat = 'comida-preparada';
+    if (quickPantryIsFrozen && cat === 'otros') cat = 'congelados';
+
+    const expiry = quickPantryExpiry || (quickPantryIsFrozen ? getOffsetDate(90) : getDefaultExpiryDate(quickPantryName));
+
+    const calories = quickPantryCalories ? parseFloat(quickPantryCalories) : undefined;
+    const protein = quickPantryProtein ? parseFloat(quickPantryProtein) : undefined;
+    const carbs = quickPantryCarbs ? parseFloat(quickPantryCarbs) : undefined;
+    const fat = quickPantryFat ? parseFloat(quickPantryFat) : undefined;
+
+    const hasNutrition = calories !== undefined || protein !== undefined || carbs !== undefined || fat !== undefined;
 
     const newItem: PantryItem = {
       id: 'pantry_' + Date.now(),
       name: quickPantryName.trim(),
       category: cat,
       quantity: Number(quickPantryQty) || 1,
-      unit: guessUnit(quickPantryName),
+      unit: quickPantryUnit || guessUnit(quickPantryName),
       price: isNaN(price || 0) ? undefined : price,
       expiryDate: expiry,
+      isFrozen: quickPantryIsFrozen || cat === 'congelados',
+      isPreparedMeal: quickPantryIsPrepared || cat === 'comida-preparada',
+      servings: quickPantryIsPrepared ? Number(quickPantryQty) || 1 : undefined,
+      notes: quickPantryNotes.trim() || undefined,
+      nutrition: hasNutrition ? { calories, protein, carbs, fat } : undefined,
       addedAt: new Date().toISOString(),
     };
 
     setPantry([newItem, ...pantry]);
     setQuickPantryName('');
     setQuickPantryQty(1);
+    setQuickPantryUnit('uds');
     setQuickPantryPrice('');
     setQuickPantryExpiry('');
+    setQuickPantryIsFrozen(false);
+    setQuickPantryIsPrepared(false);
+    setQuickPantryCalories('');
+    setQuickPantryProtein('');
+    setQuickPantryCarbs('');
+    setQuickPantryFat('');
+    setQuickPantryNotes('');
+    setShowAdvancedPantryForm(false);
   };
 
   // Update Pantry Item Quantity
@@ -500,20 +539,43 @@ TOTAL 12.45 €`;
         {/* TAB 1: FRIGO / DESPENSA */}
         {activeTab === 'frigo' && (
           <div className="space-y-4">
-            {/* Quick Add Form with Category, Price & Expiry */}
-            <form onSubmit={handleAddPantryItem} className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200 space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-                Añadir al frigorífico
-              </label>
+            {/* Quick Add Form with Category, Price, Expiry, Frozen, Prepared Meals & Nutrition */}
+            <form onSubmit={handleAddPantryItem} className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200 space-y-2.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+                  Añadir al frigorífico o congelador
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedPantryForm(!showAdvancedPantryForm)}
+                  className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-lg flex items-center gap-1 transition"
+                >
+                  <Activity className="w-3 h-3" />
+                  {showAdvancedPantryForm ? 'Menos opciones' : '+ Nutrición y Tuppers'}
+                  {showAdvancedPantryForm ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Producto (ej: Leche, Huevos...)"
+                  placeholder="Producto o plato (ej: Pollo al curry, Tupper lentejas...)"
                   value={quickPantryName}
                   onChange={e => {
-                    setQuickPantryName(e.target.value);
-                    if (e.target.value.length > 2) {
-                      setQuickPantryCategory(guessCategory(e.target.value));
+                    const val = e.target.value;
+                    setQuickPantryName(val);
+                    if (val.length > 2) {
+                      const lower = val.toLowerCase();
+                      if (lower.match(/tupper|preparad|guiso|sobra|sopa|lasaña|lentejas cocinadas/)) {
+                        setQuickPantryCategory('comida-preparada');
+                        setQuickPantryIsPrepared(true);
+                      } else if (lower.match(/congelad|helado/)) {
+                        setQuickPantryCategory('congelados');
+                        setQuickPantryIsFrozen(true);
+                      } else {
+                        setQuickPantryCategory(guessCategory(val));
+                      }
+                      setQuickPantryUnit(guessUnit(val));
                     }
                   }}
                   className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -523,24 +585,44 @@ TOTAL 12.45 €`;
                   min="1"
                   value={quickPantryQty}
                   onChange={e => setQuickPantryQty(Number(e.target.value))}
-                  className="w-14 bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-14 bg-slate-50 border border-slate-300 rounded-xl px-1 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   title="Cantidad"
                 />
+                <select
+                  value={quickPantryUnit}
+                  onChange={e => setQuickPantryUnit(e.target.value)}
+                  className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-1.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="uds">uds</option>
+                  <option value="tupper">tupper</option>
+                  <option value="raciones">raciones</option>
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                  <option value="ml">ml</option>
+                  <option value="L">L</option>
+                  <option value="paquete">paq.</option>
+                </select>
               </div>
 
               {/* Category selector + Price + Expiry */}
-              <div className="grid grid-cols-3 gap-2 pt-1 text-xs">
+              <div className="grid grid-cols-3 gap-2 pt-0.5 text-xs">
                 <select
                   value={quickPantryCategory}
-                  onChange={e => setQuickPantryCategory(e.target.value as Category)}
+                  onChange={e => {
+                    const newCat = e.target.value as Category;
+                    setQuickPantryCategory(newCat);
+                    if (newCat === 'congelados') setQuickPantryIsFrozen(true);
+                    if (newCat === 'comida-preparada') setQuickPantryIsPrepared(true);
+                  }}
                   className="bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="lacteos">🧀 Lácteos</option>
+                  <option value="comida-preparada">🍱 Tupper / Preparada</option>
+                  <option value="congelados">🧊 Congelados</option>
                   <option value="carne-pescado">🥩 Carne/Pescado</option>
                   <option value="fruta-verdura">🍎 Fruta/Verdura</option>
+                  <option value="lacteos">🧀 Lácteos</option>
                   <option value="despensa">🥫 Despensa</option>
                   <option value="bebidas">🧃 Bebidas</option>
-                  <option value="congelados">🧊 Congelados</option>
                   <option value="otros">🍽️ Otros</option>
                 </select>
 
@@ -571,6 +653,107 @@ TOTAL 12.45 €`;
                   </button>
                 </div>
               </div>
+
+              {/* Quick toggle pills: Congelado o Comida preparada */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setQuickPantryIsFrozen(!quickPantryIsFrozen)}
+                  className={`text-xs px-2.5 py-1 rounded-xl flex items-center gap-1 font-medium transition ${
+                    quickPantryIsFrozen
+                      ? 'bg-sky-100 text-sky-800 border border-sky-300'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Snowflake className="w-3.5 h-3.5" />
+                  <span>{quickPantryIsFrozen ? '❄️ En Congelador' : '¿Está congelado?'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !quickPantryIsPrepared;
+                    setQuickPantryIsPrepared(next);
+                    if (next) {
+                      setQuickPantryCategory('comida-preparada');
+                      if (quickPantryUnit === 'uds') setQuickPantryUnit('tupper');
+                    }
+                  }}
+                  className={`text-xs px-2.5 py-1 rounded-xl flex items-center gap-1 font-medium transition ${
+                    quickPantryIsPrepared
+                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5" />
+                  <span>{quickPantryIsPrepared ? '🍱 Comida lista / Tupper' : '¿Comida ya hecha?'}</span>
+                </button>
+              </div>
+
+              {/* Advanced Nutrition & Notes Accordion */}
+              {showAdvancedPantryForm && (
+                <div className="pt-2 border-t border-slate-100 space-y-2 bg-slate-50/70 p-2.5 rounded-xl">
+                  <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                    Valores nutricionales (por ración o total):
+                  </p>
+                  <div className="grid grid-cols-4 gap-1.5 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">Calorías</span>
+                      <input
+                        type="number"
+                        placeholder="kcal"
+                        value={quickPantryCalories}
+                        onChange={e => setQuickPantryCalories(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">Proteínas</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="g"
+                        value={quickPantryProtein}
+                        onChange={e => setQuickPantryProtein(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">Carbos</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="g"
+                        value={quickPantryCarbs}
+                        onChange={e => setQuickPantryCarbs(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">Grasas</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="g"
+                        value={quickPantryFat}
+                        onChange={e => setQuickPantryFat(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-500 block mb-0.5">Notas / observaciones</span>
+                    <input
+                      type="text"
+                      placeholder="Ej: Descongelar la noche de antes, lleva salsa de soja..."
+                      value={quickPantryNotes}
+                      onChange={e => setQuickPantryNotes(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
             </form>
 
             {/* Category Filter Pills */}
@@ -626,24 +809,35 @@ TOTAL 12.45 €`;
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">
-                          {item.category === 'fruta-verdura' ? '🍎' :
+                          {item.category === 'comida-preparada' ? '🍱' :
+                           item.isFrozen || item.category === 'congelados' ? '🧊' :
+                           item.category === 'fruta-verdura' ? '🍎' :
                            item.category === 'carne-pescado' ? '🥩' :
                            item.category === 'lacteos' ? '🧀' :
                            item.category === 'despensa' ? '🥫' :
-                           item.category === 'bebidas' ? '🧃' :
-                           item.category === 'congelados' ? '🧊' : '🍽️'}
+                           item.category === 'bebidas' ? '🧃' : '🍽️'}
                         </span>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="font-semibold text-slate-800 text-sm">{item.name}</h3>
+                            {item.isFrozen && (
+                              <span className="text-[10px] font-semibold bg-sky-100 text-sky-700 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                                <Snowflake className="w-2.5 h-2.5" /> Congelado
+                              </span>
+                            )}
+                            {item.isPreparedMeal && (
+                              <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                                <UtensilsCrossed className="w-2.5 h-2.5" /> Tupper / Plato
+                              </span>
+                            )}
                             {item.price && (
                               <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                                 {item.price.toFixed(2)}€
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-xs text-slate-500">
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <p className="text-xs text-slate-500 font-medium">
                               {item.quantity} {item.unit}
                             </p>
 
@@ -670,7 +864,23 @@ TOTAL 12.45 €`;
                                   : `Caduca en ${daysLeft} días`}
                               </span>
                             )}
+
+                            {/* Nutrition badge if available */}
+                            {item.nutrition && (
+                              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Activity className="w-2.5 h-2.5 text-emerald-600" />
+                                {item.nutrition.calories ? `${item.nutrition.calories} kcal` : ''}
+                                {item.nutrition.protein ? ` • ${item.nutrition.protein}g P` : ''}
+                              </span>
+                            )}
                           </div>
+
+                          {/* Notes if available */}
+                          {item.notes && (
+                            <p className="text-[11px] text-slate-400 mt-1 italic">
+                              "{item.notes}"
+                            </p>
+                          )}
                         </div>
                       </div>
 

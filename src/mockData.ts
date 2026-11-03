@@ -101,8 +101,11 @@ export function guessCategory(name: string): Category {
   if (n.match(/agua|zumo|coca|cerveza|refresco|vino|cafe|café|te|té/)) {
     return 'bebidas';
   }
-  if (n.match(/helado|pizza|congelad/)) {
+  if (n.match(/helado|congelad/)) {
     return 'congelados';
+  }
+  if (n.match(/tupper|preparad|guiso|sobra|sopa|lasaña|lentejas cocinadas|plato preparado/)) {
+    return 'comida-preparada';
   }
   return 'otros';
 }
@@ -118,6 +121,8 @@ export function guessUnit(name: string): string {
 // Estimar días habituales de caducidad según el producto
 export function guessExpiryDays(name: string): number {
   const n = name.toLowerCase();
+  if (n.match(/tupper|preparad|guiso|sobra|cocinad/)) return 4; // Comida cocinada / tuppers en frigo: 3-4 días
+  if (n.match(/congelad/)) return 90; // En congelador: 3 meses
   if (n.match(/pescado|merluza|salmon|salmón/)) return 2; // Pescado fresco: 2 días
   if (n.match(/carne|pollo|pechuga|ternera|cerdo|picada/)) return 3; // Carnes frescas: 3 días
   if (n.match(/lechuga|fresa|aguacate|tomate/)) return 5; // Verdura/fruta delicada: 4-5 días
