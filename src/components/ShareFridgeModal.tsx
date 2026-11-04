@@ -358,3 +358,4 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
     </div>
   );
 };
+

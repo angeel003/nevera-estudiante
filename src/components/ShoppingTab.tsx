@@ -148,70 +148,72 @@ export const ShoppingTab: React.FC<ShoppingTabProps> = ({
       )}
 
       {/* Listado de artículos */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
+      <div>
         {filteredList.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 text-sm">
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-sm">
             {shoppingList.length === 0
               ? 'No tienes elementos en la lista de compra.'
               : 'No hay productos en esta tienda.'}
           </div>
         ) : (
-          filteredList.map((item) => (
-            <div
-              key={item.id}
-              className={`p-3.5 flex items-center justify-between gap-3 transition-colors ${
-                item.checked ? 'bg-emerald-50/40 text-slate-400 line-through' : 'hover:bg-slate-50'
-              }`}
-            >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {filteredList.map((item) => (
               <div
-                className="flex items-center gap-3 flex-1 cursor-pointer"
-                onClick={() => onToggleItem(item.id)}
+                key={item.id}
+                className={`bg-white rounded-2xl border border-slate-200 p-3.5 flex items-center justify-between gap-3 transition-colors shadow-2xs ${
+                  item.checked ? 'bg-emerald-50/40 text-slate-400 line-through' : 'hover:border-emerald-300'
+                }`}
               >
-                <input
-                  type="checkbox"
-                  checked={item.checked}
-                  onChange={() => {}}
-                  className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
-                />
+                <div
+                  className="flex items-center gap-3 flex-1 cursor-pointer"
+                  onClick={() => onToggleItem(item.id)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={item.checked}
+                    onChange={() => {}}
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                  />
 
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-sm font-semibold ${item.checked ? 'text-slate-400' : 'text-slate-800'}`}>
-                      {item.name}
-                    </span>
-
-                    {/* Insignia de tienda asignada */}
-                    {item.assignedSupermarket && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <Store className="w-2.5 h-2.5" />
-                        {item.assignedSupermarket}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-semibold ${item.checked ? 'text-slate-400' : 'text-slate-800'}`}>
+                        {item.name}
                       </span>
-                    )}
 
-                    {item.estimatedPrice !== undefined && item.estimatedPrice > 0 && (
-                      <span className="text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full">
-                        {item.estimatedPrice.toFixed(2)}€
-                      </span>
+                      {/* Insignia de tienda asignada */}
+                      {item.assignedSupermarket && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Store className="w-2.5 h-2.5" />
+                          {item.assignedSupermarket}
+                        </span>
+                      )}
+
+                      {item.estimatedPrice !== undefined && item.estimatedPrice > 0 && (
+                        <span className="text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full">
+                          {item.estimatedPrice.toFixed(2)}€
+                        </span>
+                      )}
+                    </div>
+
+                    {item.assignedProductName && item.assignedProductName !== item.name && (
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Recomendado: {item.assignedProductName}
+                      </p>
                     )}
                   </div>
-
-                  {item.assignedProductName && item.assignedProductName !== item.name && (
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Recomendado: {item.assignedProductName}
-                    </p>
-                  )}
                 </div>
-              </div>
 
-              <button
-                onClick={() => onRemoveItem(item.id)}
-                className="text-slate-300 hover:text-red-500 p-1.5 transition"
-                title="Eliminar de la lista"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))
+                <button
+                  onClick={() => onRemoveItem(item.id)}
+                  className="text-slate-300 hover:text-red-500 p-1.5 transition"
+                  title="Eliminar de la lista"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

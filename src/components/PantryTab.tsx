@@ -336,60 +336,74 @@ export const PantryTab: React.FC<PantryTabProps> = ({
           </select>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 pt-0.5 text-xs">
-          <select
-            value={category}
-            onChange={e => {
-              const newCat = e.target.value as Category;
-              setCategory(newCat);
-              if (newCat === 'congelados') setIsFrozen(true);
-              if (newCat === 'comida-preparada') setIsPrepared(true);
-            }}
-            className="bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="comida-preparada">🍱 Tupper / Preparada</option>
-            <option value="congelados">🧊 Congelados</option>
-            <option value="carne-pescado">🥩 Carne/Pescado</option>
-            <option value="fruta-verdura">🍎 Fruta/Verdura</option>
-            <option value="lacteos">🧀 Lácteos</option>
-            <option value="despensa">🥫 Despensa</option>
-            <option value="bebidas">🧃 Bebidas</option>
-            <option value="otros">🍽️ Otros</option>
-          </select>
-
-          <div className="relative">
-            <span className="absolute left-2.5 top-2 text-slate-400">€</span>
-            <input
-              type="text"
-              placeholder="Precio pack"
-              value={price}
-              onChange={e => setPrice(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              title="Precio del paquete o total (€)"
-            />
+        {/* Campos secundarios responsive sin desbordamiento */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-0.5 text-xs">
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">CATEGORÍA</label>
+            <select
+              value={category}
+              onChange={e => {
+                const newCat = e.target.value as Category;
+                setCategory(newCat);
+                if (newCat === 'congelados') setIsFrozen(true);
+                if (newCat === 'comida-preparada') setIsPrepared(true);
+              }}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+            >
+              <option value="comida-preparada">🍱 Tupper / Preparada</option>
+              <option value="congelados">🧊 Congelados</option>
+              <option value="carne-pescado">🥩 Carne/Pescado</option>
+              <option value="fruta-verdura">🍎 Fruta/Verdura</option>
+              <option value="lacteos">🧀 Lácteos</option>
+              <option value="despensa">🥫 Despensa</option>
+              <option value="bebidas">🧃 Bebidas</option>
+              <option value="otros">🍽️ Otros</option>
+            </select>
           </div>
 
-          <div className="flex gap-1.5">
-            <input
-              type="text"
-              placeholder="€/kg (opc)"
-              value={pricePerKg}
-              onChange={e => setPricePerKg(e.target.value)}
-              className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-[11px] text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              title="Precio por kilo o litro (€/kg)"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 block mb-0.5">PRECIO (€)</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-2 text-slate-400">€</span>
+                <input
+                  type="text"
+                  placeholder="0.00"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 block mb-0.5">€/KG (OPC)</label>
+              <input
+                type="text"
+                placeholder="€/kg"
+                value={pricePerKg}
+                onChange={e => setPricePerKg(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">CADUCIDAD</label>
             <input
               type="date"
               value={expiry}
               onChange={e => setExpiry(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-1.5 py-1.5 text-[11px] text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              title="Fecha de caducidad"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
             />
+          </div>
+
+          <div className="flex items-end">
             <button
               type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl flex items-center justify-center font-medium transition active:scale-95 shadow-xs shrink-0"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-xs transition flex items-center justify-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
+              <span>Añadir al Frigo</span>
             </button>
           </div>
         </div>
@@ -560,23 +574,24 @@ export const PantryTab: React.FC<PantryTabProps> = ({
             <p className="text-xs text-slate-400 mt-1">Prueba a seleccionar otra categoría o añadir un producto.</p>
           </div>
         ) : (
-          filteredPantry.map(item => {
-            const daysLeft = getDaysRemaining(item.expiryDate);
-            const isExpired = daysLeft !== null && daysLeft < 0;
-            const isUrgent = daysLeft !== null && daysLeft <= 2 && !isExpired;
-            const isWarning = daysLeft !== null && daysLeft > 2 && daysLeft <= 5;
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {filteredPantry.map(item => {
+              const daysLeft = getDaysRemaining(item.expiryDate);
+              const isExpired = daysLeft !== null && daysLeft < 0;
+              const isUrgent = daysLeft !== null && daysLeft <= 2 && !isExpired;
+              const isWarning = daysLeft !== null && daysLeft > 2 && daysLeft <= 5;
 
-            return (
-              <div
-                key={item.id}
-                className={`bg-white p-3.5 rounded-2xl border transition shadow-xs flex items-center justify-between ${
-                  isExpired
-                    ? 'border-red-300 bg-red-50/30'
-                    : isUrgent
-                    ? 'border-amber-300 bg-amber-50/20'
-                    : 'border-slate-200/80 hover:border-emerald-300'
-                }`}
-              >
+              return (
+                <div
+                  key={item.id}
+                  className={`bg-white p-3.5 rounded-2xl border transition shadow-xs flex items-center justify-between ${
+                    isExpired
+                      ? 'border-red-300 bg-red-50/30'
+                      : isUrgent
+                      ? 'border-amber-300 bg-amber-50/20'
+                      : 'border-slate-200/80 hover:border-emerald-300'
+                  }`}
+                >
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">
                     {item.category === 'comida-preparada' ? '🍱' :
@@ -713,10 +728,11 @@ export const PantryTab: React.FC<PantryTabProps> = ({
                 </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
 };
 

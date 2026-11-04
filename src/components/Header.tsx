@@ -28,15 +28,15 @@ export const Header: React.FC<HeaderProps> = ({
   householdName,
 }) => {
   return (
-    <header className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 sticky top-0 z-20 shadow-md">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <span>🍳</span> MyFridge
+    <header className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white p-3.5 sm:px-6 sticky top-0 z-20 shadow-md">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-black tracking-tight flex items-center gap-1.5 truncate">
+            <span className="text-xl">🍳</span> <span>MyFridge</span>
           </h1>
-          <p className="text-xs text-emerald-100">Control de frigo, compras y recetas</p>
+          <p className="text-[11px] sm:text-xs text-emerald-100/90 truncate">Control de frigo, compras y recetas</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {onOpenShareFridge && (
             <button
               onClick={onOpenShareFridge}

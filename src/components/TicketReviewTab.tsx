@@ -171,11 +171,11 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
           </div>
 
           {/* Lista de productos para verificar */}
-          <div className="space-y-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {ticketSession.items.map(item => (
               <div
                 key={item.id}
-                className={`bg-white p-3.5 rounded-2xl border transition shadow-xs space-y-2 ${
+                className={`bg-white p-3.5 rounded-2xl border transition shadow-xs space-y-2 flex flex-col justify-between ${
                   item.status === 'verified'
                     ? 'border-emerald-300 bg-emerald-50/20'
                     : 'border-slate-200 hover:border-slate-300'
@@ -183,9 +183,9 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
               >
                 {/* Cabecera del item: texto original vs nombre interpretado */}
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                      Texto leído del ticket: "{item.rawText}"
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded truncate block">
+                      Texto leído: "{item.rawText}"
                     </span>
                     <div className="mt-1">
                       <input
@@ -208,7 +208,7 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
                 </div>
 
                 {/* Campos editables: Categoría, Cantidad, Unidad, Precio, Caducidad */}
-                <div className="grid grid-cols-4 gap-2 pt-1 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                   <div>
                     <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Categoría</label>
                     <select

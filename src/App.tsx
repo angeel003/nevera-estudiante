@@ -879,7 +879,7 @@ TOTAL 15.55 €`;
   const pendingProposalsCount = adminProposals.filter(p => p.status === 'pending').length;
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col shadow-xl">
+    <div className="w-full max-w-5xl mx-auto min-h-screen bg-slate-50/70 flex flex-col shadow-2xl">
       {/* Top Header */}
       <Header
         pantryCount={pantry.length}

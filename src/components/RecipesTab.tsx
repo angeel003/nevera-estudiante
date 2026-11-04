@@ -107,7 +107,7 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
       </div>
 
       {/* Listado de recetas */}
-      <div className="space-y-3">
+      <div>
         {filteredRecipes.length === 0 ? (
           <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
             <ChefHat className="w-10 h-10 text-slate-300 mx-auto mb-2" />
@@ -115,19 +115,20 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
             <p className="text-xs text-slate-400 mt-1">Prueba a añadir más comida a tu nevera o crea tu propia receta.</p>
           </div>
         ) : (
-          filteredRecipes.map(recipe => {
-            const ev = evaluateRecipe(recipe);
-            const currentServings = getRecipeServings(recipe);
-            const baseServings = recipe.servings || 1;
-            const factor = currentServings / baseServings;
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {filteredRecipes.map(recipe => {
+              const ev = evaluateRecipe(recipe);
+              const currentServings = getRecipeServings(recipe);
+              const baseServings = recipe.servings || 1;
+              const factor = currentServings / baseServings;
 
-            return (
-              <div
-                key={recipe.id}
-                className={`bg-white rounded-2xl border transition shadow-xs overflow-hidden ${
-                  ev.urgentIngredients.length > 0 ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'
-                }`}
-              >
+              return (
+                <div
+                  key={recipe.id}
+                  className={`bg-white rounded-2xl border transition shadow-xs overflow-hidden flex flex-col justify-between ${
+                    ev.urgentIngredients.length > 0 ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'
+                  }`}
+                >
                 {/* Cabecera de la receta */}
                 <div className="p-4 space-y-2">
                   <div className="flex justify-between items-start gap-2">
@@ -293,9 +294,10 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
                 </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
 };

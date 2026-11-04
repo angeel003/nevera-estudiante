@@ -19,7 +19,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   expiringSoonCount
 }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-200 flex justify-around py-2 px-1 z-30 shadow-lg">
+    <nav className="fixed bottom-0 left-0 right-0 max-w-5xl mx-auto bg-white/95 backdrop-blur-md border-t border-slate-200/90 flex justify-around py-2.5 px-2 z-30 shadow-lg sm:rounded-t-2xl">
       <button
         onClick={() => setActiveTab('frigo')}
         className={`flex flex-col items-center py-1 px-3 rounded-xl transition ${
