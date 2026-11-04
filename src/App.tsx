@@ -24,7 +24,7 @@ import {
   ADMIN_EMAILS,
   getDaysRemaining
 } from './utils/constants';
-import { INITIAL_RECIPES, guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
+import { guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
 import { parseReceiptText } from './receiptParser';
 import { extractTextFromPdf } from './pdfParser';
 import { detectSupermarketFromText, SUPERMARKET_CATALOGS } from './supermarkets';
@@ -222,14 +222,41 @@ export default function App() {
     return [];
   });
 
-  // State: Custom Recipes with localStorage persistence
+  // State: Custom Recipes (solo cargadas de la base de datos D1 o creadas por el usuario)
   const [recipes, setRecipes] = useState<Recipe[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_RECIPES);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+      try {
+        const parsed = JSON.parse(saved);
+        const isLegacyDemo = Array.isArray(parsed) && parsed.some(item => item.id === 'r1' || item.id === 'r2');
+        if (isLegacyDemo) {
+          localStorage.removeItem(STORAGE_KEY_RECIPES);
+          return [];
+        }
+        return parsed;
+      } catch (e) { /* ignore */ }
     }
-    return INITIAL_RECIPES;
+    return [];
   });
+
+  // Cargar recetas reales de la base de datos Cloudflare D1
+  useEffect(() => {
+    const fetchDbRecipes = async () => {
+      try {
+        const res = await fetch(`/api/recipes?userId=${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.recipes)) {
+            setRecipes(data.recipes);
+            localStorage.setItem(STORAGE_KEY_RECIPES, JSON.stringify(data.recipes));
+          }
+        }
+      } catch (err) {
+        // En modo local o sin conexión se mantiene el estado
+      }
+    };
+    fetchDbRecipes();
+  }, [userId]);
 
   // Shopping input states
   const [quickShoppingName, setQuickShoppingName] = useState('');
@@ -444,17 +471,29 @@ export default function App() {
     setEditingPantryItem(null);
   };
 
-  // Recipe actions
-  const removeRecipe = (id: string) => {
+  // Recipe actions (sincronizadas con Cloudflare D1)
+  const removeRecipe = async (id: string) => {
     if (window.confirm('¿Quieres eliminar esta receta?')) {
       setRecipes(prev => prev.filter(r => r.id !== id));
+      try {
+        await fetch(`/api/recipes?id=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+        });
+      } catch (e) { /* ignore */ }
     }
   };
 
-  const handleSaveRecipe = (newRecipe: Recipe) => {
+  const handleSaveRecipe = async (newRecipe: Recipe) => {
     setRecipes([newRecipe, ...recipes]);
     setShowRecipeModal(false);
     confetti({ particleCount: 60, spread: 70 });
+    try {
+      await fetch('/api/recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, recipe: newRecipe }),
+      });
+    } catch (e) { /* ignore */ }
   };
 
   const getRecipeServings = (recipe: Recipe): number => {

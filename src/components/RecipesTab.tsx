@@ -113,11 +113,30 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
 
       {/* Listado de recetas */}
       <div>
-        {filteredRecipes.length === 0 ? (
+        {recipes.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-300 p-6 space-y-3 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+              <ChefHat className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-base text-slate-800 font-bold">No hay recetas guardadas en la base de datos</p>
+              <p className="text-xs text-slate-400 mt-0.5 max-w-xs mx-auto">
+                Crea tu primera receta personalizada y se guardará directamente en tu base de datos Cloudflare D1.
+              </p>
+            </div>
+            <button
+              onClick={onOpenCreateModal}
+              className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-xs transition active:scale-95 inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Crear mi primera receta</span>
+            </button>
+          </div>
+        ) : filteredRecipes.length === 0 ? (
           <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
             <ChefHat className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm text-slate-600 font-medium">No se encontraron recetas</p>
-            <p className="text-xs text-slate-400 mt-1">Prueba a añadir más comida a tu nevera o crea tu propia receta.</p>
+            <p className="text-sm text-slate-600 font-medium">No se encontraron recetas con este ingrediente</p>
+            <p className="text-xs text-slate-400 mt-1">Prueba a seleccionar otra categoría o añade una nueva receta.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
