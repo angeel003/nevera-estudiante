@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
-  Heart,
   Share2
 } from 'lucide-react';
 import type { HouseholdInfo, UserAccount } from '../types';
@@ -135,8 +134,8 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Heart className="w-3.5 h-3.5 text-rose-500" />
-            <span>Familiar / Vista Mamá (Solo Ver)</span>
+            <Eye className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Compartir Frigo (Solo Lectura)</span>
           </button>
 
           <button
@@ -151,7 +150,7 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
             }`}
           >
             <Users className="w-3.5 h-3.5 text-teal-600" />
-            <span>Piso Compartido (Colaborar)</span>
+            <span>Frigo Compartido (Colaborar)</span>
           </button>
 
           <button
@@ -189,24 +188,24 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
             </div>
           )}
 
-          {/* 1. MODO FAMILIAR (VISTA MAMÁ / SOLO LECTURA) */}
+          {/* 1. MODO SOLO LECTURA (COMPARTIR PARA CONSULTAR) */}
           {activeTab === 'family' && (
             <div className="space-y-4">
-              <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
-                  <Eye className="w-4 h-4 text-rose-600" />
-                  <span>Enlace de Solo Lectura para Familiares</span>
+              <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                  <Eye className="w-4 h-4 text-indigo-600" />
+                  <span>Enlace de Consulta de Solo Lectura</span>
                 </div>
-                <p className="text-xs text-rose-900 leading-relaxed">
-                  Tu madre o familiar puede abrir este enlace desde su móvil para <strong>ver qué comida y tuppers te quedan</strong> en el frigo y congelador, sin que pueda borrar ni modificar nada por error.
+                <p className="text-xs text-indigo-950 leading-relaxed">
+                  Cualquier persona con este enlace podrá abrirlo en su teléfono para <strong>ver qué comida y tuppers te quedan</strong> en el frigo y congelador, sin poder borrar ni modificar nada.
                 </p>
                 <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     onClick={handleCopyViewerLink}
-                    className="flex-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition"
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition"
                   >
                     {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace para WhatsApp / Mamá'}</span>
+                    <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace de solo lectura'}</span>
                   </button>
 
                   {onToggleViewerMode && (
@@ -215,23 +214,23 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
                         onToggleViewerMode(!isViewerMode);
                         onClose();
                       }}
-                      className="bg-white border border-rose-300 hover:bg-rose-100/50 text-rose-800 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                      className="bg-white border border-indigo-300 hover:bg-indigo-100/50 text-indigo-900 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>{isViewerMode ? 'Salir de Modo Espectador' : 'Simular qué ve ella'}</span>
+                      <span>{isViewerMode ? 'Salir de Solo Lectura' : 'Probar vista de solo lectura'}</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Protección del Vault en la vista de mamá */}
+              {/* Protección del Vault */}
               <div className="bg-slate-900 text-slate-200 rounded-2xl p-4 text-xs space-y-2 shadow-xs">
                 <div className="flex items-center gap-2 text-amber-400 font-bold">
                   <Lock className="w-4 h-4" />
-                  <span>Tu Bóveda Privada (Vault) está 100% protegida</span>
+                  <span>Tu Bóveda Privada (Vault) no se mostrará</span>
                 </div>
                 <p className="text-slate-300 leading-relaxed text-[11px]">
-                  Cualquier alimento o capricho que tengas marcado como <strong>"🔒 Bóveda Privada"</strong> será invisible. Tu madre o quien abra el enlace solo verá la comida que hayas decidido no ocultar.
+                  Cualquier alimento o producto que tengas guardado en tu <strong>"🔒 Bóveda Privada"</strong> permanecerá completamente oculto. Quien abra este enlace solo verá los alimentos de tu frigo habitual.
                 </p>
               </div>
             </div>

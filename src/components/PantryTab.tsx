@@ -13,7 +13,7 @@ import {
   Refrigerator,
   Lock,
   Users,
-  Home
+  Share2
 } from 'lucide-react';
 import type { PantryItem, Category } from '../types';
 import { CATEGORIES, getDaysRemaining, getOffsetDate } from '../utils/constants';
@@ -61,6 +61,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   const [expiry, setExpiry] = useState('');
   const [location, setLocation] = useState<'nevera' | 'congelador' | 'despensa'>('nevera');
   const [isVault, setIsVault] = useState(false);
+  const [targetFridge, setTargetFridge] = useState<'personal' | 'shared'>('personal');
   const [isFrozen, setIsFrozen] = useState(false);
   const [isPrepared, setIsPrepared] = useState(false);
   const [calories, setCalories] = useState('');
@@ -70,8 +71,8 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   const [notes, setNotes] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Filtros superiores de Frigo Compartido vs Bóveda Privada
-  const [vaultView, setVaultView] = useState<'shared' | 'vault'>('shared');
+  // Espacio activo: Mi Frigo (personal), Mi Bóveda (privada), o Frigo Compartido (piso/pareja)
+  const [fridgeSpace, setFridgeSpace] = useState<'personal' | 'vault' | 'shared'>('personal');
   const [locationFilter, setLocationFilter] = useState<'todos' | 'nevera' | 'congelador' | 'despensa'>('todos');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -110,6 +111,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
       notes: notes.trim() || undefined,
       nutrition: hasNutrition ? { calories: cals, protein: prot, carbs: crb, fat: ft } : undefined,
       isVault: isVault,
+      targetFridge: isVault ? 'personal' : targetFridge,
       ownerId: currentUserId || 'usr_guest',
       location: location,
       addedAt: new Date().toISOString(),
@@ -125,6 +127,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     setExpiry('');
     setLocation('nevera');
     setIsVault(false);
+    setTargetFridge('personal');
     setIsFrozen(false);
     setIsPrepared(false);
     setCalories('');
@@ -135,14 +138,21 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     setShowAdvanced(false);
   };
 
+  const personalItemsCount = pantry.filter(item => !item.isVault && item.targetFridge !== 'shared').length;
   const vaultItemsCount = pantry.filter(item => item.isVault === true).length;
-  const sharedItemsCount = pantry.filter(item => !item.isVault).length;
+  const sharedItemsCount = pantry.filter(item => item.targetFridge === 'shared' && !item.isVault).length;
 
   const filteredPantry = pantry
     .filter(item => {
-      // 1. Filtro de Bóveda vs Compartido
-      if (vaultView === 'shared' && item.isVault === true) return false;
-      if (vaultView === 'vault' && item.isVault !== true) return false;
+      // 1. Filtro por Espacio (Mi Frigo vs Bóveda vs Frigo Compartido)
+      if (isViewerMode) {
+        // En modo solo lectura: NUNCA mostrar la bóveda
+        if (item.isVault) return false;
+      } else {
+        if (fridgeSpace === 'personal' && (item.isVault || item.targetFridge === 'shared')) return false;
+        if (fridgeSpace === 'vault' && !item.isVault) return false;
+        if (fridgeSpace === 'shared' && (item.isVault || item.targetFridge !== 'shared')) return false;
+      }
 
       // 2. Filtro de Ubicación (nevera, congelador, despensa)
       if (locationFilter !== 'todos') {
@@ -163,14 +173,14 @@ export const PantryTab: React.FC<PantryTabProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Banner de Modo Espectador (Vista Mamá / Familia) */}
+      {/* Banner de Modo Solo Lectura (Consulta) */}
       {isViewerMode && (
-        <div className="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 text-rose-950 p-3 sm:p-3.5 rounded-2xl text-xs flex items-center justify-between gap-2 shadow-2xs">
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 text-indigo-950 p-3 sm:p-3.5 rounded-2xl text-xs flex items-center justify-between gap-2 shadow-2xs">
           <div className="flex items-center gap-2">
-            <span className="text-xl">👩‍🍳</span>
+            <span className="text-xl">👀</span>
             <div>
-              <p className="font-bold">Vista Familiar de Solo Lectura ("Vista Mamá")</p>
-              <p className="text-[11px] text-rose-800">
+              <p className="font-bold">Modo Solo Lectura (Consulta)</p>
+              <p className="text-[11px] text-indigo-800">
                 Viendo la comida y tuppers disponibles. Alimentos privados protegidos en bóveda.
               </p>
             </div>
@@ -178,7 +188,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
           {onOpenShareFridge && (
             <button
               onClick={onOpenShareFridge}
-              className="px-2.5 py-1 bg-white border border-rose-300 text-rose-800 text-[11px] font-bold rounded-lg shadow-2xs hover:bg-rose-100 transition shrink-0"
+              className="px-2.5 py-1 bg-white border border-indigo-300 text-indigo-800 text-[11px] font-bold rounded-lg shadow-2xs hover:bg-indigo-100 transition shrink-0"
             >
               Opciones
             </button>
@@ -186,39 +196,55 @@ export const PantryTab: React.FC<PantryTabProps> = ({
         </div>
       )}
 
-      {/* Barra superior de Modo: Frigo Compartido vs Mi Bóveda (Vault) */}
+      {/* Selector de Espacio: Mi Frigo vs Mi Bóveda vs Frigo Compartido */}
       {!isViewerMode && (
-        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-          <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
+        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold overflow-x-auto no-scrollbar">
             <button
               type="button"
-              onClick={() => setVaultView('shared')}
-              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                vaultView === 'shared'
+              onClick={() => setFridgeSpace('personal')}
+              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                fridgeSpace === 'personal'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Home className="w-3.5 h-3.5" />
-              <span>Frigo Compartido</span>
+              <Refrigerator className="w-3.5 h-3.5" />
+              <span>Mi Frigo</span>
               <span className="text-[10px] bg-white/25 px-1.5 py-0.2 rounded-full font-black ml-0.5">
-                {sharedItemsCount}
+                {personalItemsCount}
               </span>
             </button>
 
             <button
               type="button"
-              onClick={() => setVaultView('vault')}
-              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                vaultView === 'vault'
+              onClick={() => setFridgeSpace('vault')}
+              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                fridgeSpace === 'vault'
                   ? 'bg-purple-700 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Lock className="w-3.5 h-3.5 text-amber-300" />
               <span>Mi Bóveda (Vault)</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5 ${vaultView === 'vault' ? 'bg-white/25' : 'bg-purple-100 text-purple-800'}`}>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5 ${fridgeSpace === 'vault' ? 'bg-white/25' : 'bg-purple-100 text-purple-800'}`}>
                 {vaultItemsCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFridgeSpace('shared')}
+              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                fridgeSpace === 'shared'
+                  ? 'bg-teal-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 text-teal-200" />
+              <span>Frigo Compartido</span>
+              <span className="text-[10px] bg-white/25 px-1.5 py-0.2 rounded-full font-black ml-0.5">
+                {sharedItemsCount}
               </span>
             </button>
           </div>
@@ -227,10 +253,10 @@ export const PantryTab: React.FC<PantryTabProps> = ({
             <button
               type="button"
               onClick={onOpenShareFridge}
-              className="text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+              className="text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs whitespace-nowrap"
             >
-              <Users className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{householdName} ({householdMembersCount} {householdMembersCount === 1 ? 'persona' : 'personas'})</span>
+              <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Compartir / Enlaces</span>
             </button>
           )}
         </div>
@@ -288,19 +314,37 @@ export const PantryTab: React.FC<PantryTabProps> = ({
       </div>
 
       {/* Mensaje descriptivo si está en la Bóveda */}
-      {vaultView === 'vault' && (
+      {fridgeSpace === 'vault' && (
         <div className="bg-purple-950 text-purple-100 p-3 rounded-2xl border border-purple-800 text-xs flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-amber-300 shrink-0" />
             <span>
-              <strong>Bóveda Privada activa:</strong> Alimentos ocultos que solo tú puedes ver. Tus compañeros de frigo no pueden verlos.
+              <strong>Bóveda Privada activa:</strong> Alimentos ocultos que solo tú puedes ver. No se muestran a compañeros ni en enlaces de consulta.
             </span>
           </div>
           <button
-            onClick={() => setVaultView('shared')}
+            onClick={() => setFridgeSpace('personal')}
             className="text-[11px] underline font-bold text-amber-300 shrink-0"
           >
-            Volver a Compartido
+            Volver a Mi Frigo
+          </button>
+        </div>
+      )}
+
+      {/* Mensaje descriptivo si está en el Frigo Compartido */}
+      {fridgeSpace === 'shared' && (
+        <div className="bg-teal-950 text-teal-100 p-3 rounded-2xl border border-teal-800 text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-teal-300 shrink-0" />
+            <span>
+              <strong>{householdName}:</strong> Alimentos comunes del piso / pareja ({sharedItemsCount} disponibles).
+            </span>
+          </div>
+          <button
+            onClick={() => setFridgeSpace('personal')}
+            className="text-[11px] underline font-bold text-teal-300 shrink-0"
+          >
+            Volver a Mi Frigo
           </button>
         </div>
       )}
@@ -443,13 +487,14 @@ export const PantryTab: React.FC<PantryTabProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
-          <div className="flex items-center gap-1 text-xs">
-            <span className="text-[10px] font-bold text-slate-400 mr-0.5">GUARDAR EN:</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+          {/* Ubicación física */}
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">SITIO:</span>
             <button
               type="button"
               onClick={() => { setLocation('nevera'); setIsFrozen(false); }}
-              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+              className={`px-2 py-1 rounded-lg font-semibold flex items-center gap-1 transition ${
                 location === 'nevera' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold' : 'bg-slate-100 text-slate-600'
               }`}
             >
@@ -458,7 +503,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
             <button
               type="button"
               onClick={() => { setLocation('congelador'); setIsFrozen(true); }}
-              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+              className={`px-2 py-1 rounded-lg font-semibold flex items-center gap-1 transition ${
                 location === 'congelador' ? 'bg-sky-100 text-sky-800 border border-sky-300 font-bold' : 'bg-slate-100 text-slate-600'
               }`}
             >
@@ -467,15 +512,13 @@ export const PantryTab: React.FC<PantryTabProps> = ({
             <button
               type="button"
               onClick={() => { setLocation('despensa'); setIsFrozen(false); }}
-              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+              className={`px-2 py-1 rounded-lg font-semibold flex items-center gap-1 transition ${
                 location === 'despensa' ? 'bg-amber-100 text-amber-800 border border-amber-300 font-bold' : 'bg-slate-100 text-slate-600'
               }`}
             >
               🥫 Despensa
             </button>
-          </div>
 
-          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -486,26 +529,55 @@ export const PantryTab: React.FC<PantryTabProps> = ({
                   if (unit === 'uds') setUnit('tupper');
                 }
               }}
-              className={`text-xs px-2 py-1 rounded-xl flex items-center gap-1 font-medium transition ${
-                isPrepared
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+              className={`px-2 py-1 rounded-lg font-semibold flex items-center gap-1 transition ml-1 ${
+                isPrepared ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              <UtensilsCrossed className="w-3 h-3" />
+              <span>Tupper</span>
+            </button>
+          </div>
+
+          {/* Espacio donde guardarlo */}
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">DESTINO:</span>
+            <button
+              type="button"
+              onClick={() => { setIsVault(false); setTargetFridge('personal'); }}
+              className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                !isVault && targetFridge !== 'shared'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>{isPrepared ? '🍱 Tupper' : '¿Tupper?'}</span>
+              🏠 Mi Frigo
             </button>
 
-            <label className="flex items-center gap-1.5 cursor-pointer bg-slate-900 text-white px-2.5 py-1 rounded-xl text-xs font-bold shadow-2xs hover:bg-slate-800 transition">
-              <input
-                type="checkbox"
-                checked={isVault}
-                onChange={e => setIsVault(e.target.checked)}
-                className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-0 cursor-pointer"
-              />
-              <Lock className={`w-3.5 h-3.5 ${isVault ? 'text-amber-400' : 'text-slate-400'}`} />
-              <span>{isVault ? '🔒 En Bóveda' : 'Hacer Privado (Vault)'}</span>
-            </label>
+            <button
+              type="button"
+              onClick={() => { setIsVault(true); }}
+              className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                isVault
+                  ? 'bg-purple-700 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Lock className="w-3 h-3 text-amber-300" />
+              <span>Bóveda</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setIsVault(false); setTargetFridge('shared'); }}
+              className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                !isVault && targetFridge === 'shared'
+                  ? 'bg-teal-700 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Users className="w-3 h-3" />
+              <span>Compartido</span>
+            </button>
           </div>
         </div>
 

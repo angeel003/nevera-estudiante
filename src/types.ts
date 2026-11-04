@@ -32,7 +32,8 @@ export interface PantryItem {
   notes?: string; // observaciones o notas de preparación
   nutrition?: NutritionInfo; // info nutricional opcional (kcal, proteínas, etc.)
   // Opciones de Bóveda (Vault) y Frigo Compartido
-  isVault?: boolean; // true = privado en mi cajón/bóveda, false = compartido con compañeros
+  isVault?: boolean; // true = privado en mi cajón/bóveda
+  targetFridge?: 'personal' | 'shared'; // 'personal' = mi frigo personal, 'shared' = frigo compartido con compañeros
   ownerId?: string; // id del usuario que lo añadió
   ownerName?: string; // nombre del usuario que lo aportó
   location?: 'nevera' | 'congelador' | 'despensa'; // ubicación física

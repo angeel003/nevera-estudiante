@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, UtensilsCrossed, Lock } from 'lucide-react';
+import { X, UtensilsCrossed } from 'lucide-react';
 import type { PantryItem, Category } from '../types';
 
 interface EditPantryModalProps {
@@ -16,7 +16,8 @@ export const EditPantryModal: React.FC<EditPantryModalProps> = ({
   const [formData, setFormData] = React.useState<PantryItem>({
     ...item,
     location: item.location || (item.isFrozen ? 'congelador' : item.category === 'despensa' ? 'despensa' : 'nevera'),
-    isVault: item.isVault || false
+    isVault: item.isVault || false,
+    targetFridge: item.targetFridge || (item.isVault ? 'personal' : 'personal')
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -154,25 +155,55 @@ export const EditPantryModal: React.FC<EditPantryModalProps> = ({
             </div>
           </div>
 
-          {/* Opción de Bóveda Privada (Vault) */}
-          <div className="p-3 bg-slate-900 text-white rounded-2xl space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Lock className={`w-4 h-4 ${formData.isVault ? 'text-amber-400' : 'text-slate-400'}`} />
-                <span className="text-xs font-bold text-slate-100">Mi Bóveda Privada (Vault)</span>
-              </div>
-              <input
-                type="checkbox"
-                id="vaultCheckbox"
-                checked={formData.isVault || false}
-                onChange={e => setFormData({ ...formData, isVault: e.target.checked })}
-                className="w-4 h-4 text-emerald-600 rounded-md focus:ring-emerald-500 cursor-pointer"
-              />
+          {/* Espacio: Mi Frigo vs Bóveda vs Frigo Compartido */}
+          <div>
+            <label className="text-slate-600 font-semibold block mb-1">Espacio de almacenamiento</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, isVault: false, targetFridge: 'personal' })}
+                className={`py-2 px-1 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 border transition ${
+                  !formData.isVault && formData.targetFridge !== 'shared'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                <span>🏠</span>
+                <span className="text-[11px]">Mi Frigo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, isVault: true, targetFridge: 'personal' })}
+                className={`py-2 px-1 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 border transition ${
+                  formData.isVault
+                    ? 'bg-purple-100 text-purple-900 border-purple-400 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                <span>🔒</span>
+                <span className="text-[11px]">Bóveda Privada</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, isVault: false, targetFridge: 'shared' })}
+                className={`py-2 px-1 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 border transition ${
+                  !formData.isVault && formData.targetFridge === 'shared'
+                    ? 'bg-teal-100 text-teal-900 border-teal-400 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                <span>👥</span>
+                <span className="text-[11px]">Compartido</span>
+              </button>
             </div>
-            <p className="text-[10px] text-slate-400 leading-tight">
+            <p className="text-[10px] text-slate-400 mt-1">
               {formData.isVault
-                ? '🔒 Este alimento es SOLO TUYO. Tus compañeros de piso NO lo verán en la nevera.'
-                : '🌍 Alimento compartido: Visible para tus compañeros de frigo para que sepan qué hay.'}
+                ? '🔒 Solo tú lo verás. Oculto para compañeros de piso y en enlaces compartidos.'
+                : formData.targetFridge === 'shared'
+                ? '👥 Visible para tus compañeros de piso / pareja en el frigo común.'
+                : '🏠 Tu frigo personal de uso diario.'}
             </p>
           </div>
 
