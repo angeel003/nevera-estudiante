@@ -28,6 +28,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   const [unit, setUnit] = useState('uds');
   const [category, setCategory] = useState<Category>('otros');
   const [price, setPrice] = useState('');
+  const [pricePerKg, setPricePerKg] = useState('');
   const [expiry, setExpiry] = useState('');
   const [isFrozen, setIsFrozen] = useState(false);
   const [isPrepared, setIsPrepared] = useState(false);
@@ -43,6 +44,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     if (!name.trim()) return;
 
     const parsedPrice = price ? parseFloat(price.replace(',', '.')) : undefined;
+    const parsedKg = pricePerKg ? parseFloat(pricePerKg.replace(',', '.')) : undefined;
     let cat = category === 'otros' ? guessCategory(name) : category;
     if (isPrepared && cat === 'otros') cat = 'comida-preparada';
     if (isFrozen && cat === 'otros') cat = 'congelados';
@@ -63,6 +65,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
       quantity: Number(qty) || 1,
       unit: unit || guessUnit(name),
       price: isNaN(parsedPrice || 0) ? undefined : parsedPrice,
+      pricePerKg: isNaN(parsedKg || 0) ? undefined : parsedKg,
       expiryDate,
       isFrozen: isFrozen || cat === 'congelados',
       isPreparedMeal: isPrepared || cat === 'comida-preparada',
@@ -78,6 +81,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     setQty(1);
     setUnit('uds');
     setPrice('');
+    setPricePerKg('');
     setExpiry('');
     setIsFrozen(false);
     setIsPrepared(false);
@@ -189,14 +193,23 @@ export const PantryTab: React.FC<PantryTabProps> = ({
             <span className="absolute left-2.5 top-2 text-slate-400">€</span>
             <input
               type="text"
-              placeholder="Precio"
+              placeholder="Precio pack"
               value={price}
               onChange={e => setPrice(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-6 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              title="Precio del paquete o total (€)"
             />
           </div>
 
           <div className="flex gap-1.5">
+            <input
+              type="text"
+              placeholder="€/kg (opc)"
+              value={pricePerKg}
+              onChange={e => setPricePerKg(e.target.value)}
+              className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-[11px] text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              title="Precio por kilo o litro (€/kg)"
+            />
             <input
               type="date"
               value={expiry}
@@ -390,6 +403,11 @@ export const PantryTab: React.FC<PantryTabProps> = ({
                       {item.price && (
                         <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                           {item.price.toFixed(2)}€
+                        </span>
+                      )}
+                      {item.pricePerKg && (
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {item.pricePerKg.toFixed(2)}€/kg
                         </span>
                       )}
                     </div>

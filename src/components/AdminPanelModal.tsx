@@ -162,7 +162,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         className="mt-1 text-[11px] font-bold text-amber-950 bg-amber-200 hover:bg-amber-300 px-2.5 py-1 rounded-lg transition inline-flex items-center gap-1 shadow-2xs"
                       >
                         <Layers className="w-3.5 h-3.5" />
-                        <span>Unificar como sinónimo / alias de este producto</span>
+                        <span>Actualizar precio/nombre del producto existente</span>
                       </button>
                     </div>
                   </div>

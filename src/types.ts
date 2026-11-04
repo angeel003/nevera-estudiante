@@ -21,7 +21,9 @@ export interface PantryItem {
   category: Category;
   quantity: number;
   unit: string; // 'uds', 'g', 'kg', 'ml', 'L', 'tupper', 'porcion', 'paquete'
-  price?: number; // Precio en euros
+  price?: number; // Precio total o de paquete en euros
+  pricePerKg?: number; // Precio por kilo o litro (€/kg o €/L)
+  packageWeightGrams?: number; // Peso del paquete en gramos (opcional si compra por paquete)
   addedAt: string; // ISO string
   expiryDate?: string; // YYYY-MM-DD
   isFrozen?: boolean; // si está guardado en el congelador
@@ -38,7 +40,10 @@ export interface ShoppingItem {
   quantity: number;
   unit: string;
   estimatedPrice?: number;
+  pricePerKg?: number;
   checked: boolean;
+  assignedSupermarket?: string; // Tienda asignada: 'mercadona', 'dia', 'carrefour', 'lidl', etc.
+  assignedProductName?: string; // Nombre de la marca real recomendada (ej: "Huevos Camperos Hacendado")
 }
 
 export interface Recipe {
@@ -47,13 +52,22 @@ export interface Recipe {
   description: string;
   servings: number; // Número de raciones base (ej: 1 o 2 personas)
   cookingTimeMinutes: number;
+  prepTimeMinutes?: number; // Tiempo de preparación previa (lavar, picar...)
   difficulty: 'fácil' | 'medio' | 'difícil';
   ingredients: {
     name: string;
     quantity: number;
     unit: string;
   }[];
-  steps: string[];
+  steps: string[]; // Lista detallada de pasos e instrucciones con tiempos
+}
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  name?: string;
+  token?: string;
+  isAdmin: boolean;
 }
 
 export type Supermarket = 'mercadona' | 'carrefour' | 'lidl' | 'dia' | 'alcampo' | 'eroski' | 'otro' | string;

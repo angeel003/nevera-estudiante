@@ -1,17 +1,20 @@
 -- Esquema optimizado para Cloudflare D1 (SQLite en Edge)
--- Reducción drástica de Lecturas (Reads) y Escrituras (Writes)
+-- Incluye autenticación con contraseñas seguras (PBKDF2/SHA-256) y catálogo orgánico
 
--- 1. Tabla de Usuarios y sus Metadatos
+-- 1. Tabla de Usuarios y Credenciales
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    name TEXT,
+    is_admin INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
-    last_sync INTEGER DEFAULT 0
+    last_login INTEGER DEFAULT 0
 );
 
 -- 2. Catálogo global compartido de Alimentos por Supermercado
--- (Se cachea en el Edge CDN / Cloudflare Cache API mediante cabeceras Cache-Control: public, max-age=86400)
--- ¡Al estar cacheado en Cloudflare CDN, las lecturas dan 0 coste de lectura en D1!
+-- Se llena orgánicamente con las aprobaciones del Administrador y los tickets verificados
 CREATE TABLE IF NOT EXISTS supermarket_catalog (
     id TEXT PRIMARY KEY,
     supermarket_id TEXT NOT NULL, -- 'mercadona', 'dia', 'carrefour', 'lidl', etc.
@@ -20,12 +23,33 @@ CREATE TABLE IF NOT EXISTS supermarket_catalog (
     category TEXT NOT NULL,
     default_unit TEXT DEFAULT 'uds',
     estimated_price REAL,
-    updated_at INTEGER NOT NULL
+    price_per_kg REAL,
+    updated_at INTEGER NOT NULL,
+    approved_by TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_catalog_supermarket ON supermarket_catalog(supermarket_id);
 
--- 3. Nevera / Despensa de cada usuario
+-- 3. Propuestas de alimentos pendientes de moderación
+CREATE TABLE IF NOT EXISTS food_proposals (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    user_email TEXT,
+    name TEXT NOT NULL,
+    supermarket TEXT NOT NULL,
+    category TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    price REAL,
+    price_per_kg REAL,
+    raw_text TEXT,
+    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    duplicate_suspect_json TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_status ON food_proposals(status);
+
+-- 4. Nevera / Despensa de cada usuario (Privada)
 CREATE TABLE IF NOT EXISTS pantry_items (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -34,21 +58,21 @@ CREATE TABLE IF NOT EXISTS pantry_items (
     quantity REAL NOT NULL,
     unit TEXT NOT NULL,
     price REAL,
+    price_per_kg REAL,
+    package_weight_grams REAL,
     expiry_date TEXT,
     is_frozen INTEGER DEFAULT 0,
     is_prepared INTEGER DEFAULT 0,
     servings INTEGER,
     notes TEXT,
-    nutrition_json TEXT, -- Objeto JSON empaquetado para no crear tablas secundarias ni hacer JOINs caros
-    updated_at INTEGER NOT NULL, -- Timestamp para sincronización delta incremental
-    is_deleted INTEGER DEFAULT 0 -- Soft-delete para propagar borrados con 0 pérdidas
+    nutrition_json TEXT,
+    updated_at INTEGER NOT NULL,
+    is_deleted INTEGER DEFAULT 0
 );
 
--- Índice compuesto para que una sincronización 'SELECT WHERE user_id = ? AND updated_at > ?'
--- sea de complejidad O(log N) y consuma el mínimo absoluto de filas leídas en D1
 CREATE INDEX IF NOT EXISTS idx_pantry_sync ON pantry_items(user_id, updated_at);
 
--- 4. Lista de la compra por usuario
+-- 5. Lista de la compra por usuario
 CREATE TABLE IF NOT EXISTS shopping_items (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -57,6 +81,9 @@ CREATE TABLE IF NOT EXISTS shopping_items (
     quantity REAL NOT NULL,
     unit TEXT NOT NULL,
     estimated_price REAL,
+    price_per_kg REAL,
+    assigned_supermarket TEXT,
+    assigned_product_name TEXT,
     checked INTEGER DEFAULT 0,
     updated_at INTEGER NOT NULL,
     is_deleted INTEGER DEFAULT 0
@@ -64,7 +91,7 @@ CREATE TABLE IF NOT EXISTS shopping_items (
 
 CREATE INDEX IF NOT EXISTS idx_shopping_sync ON shopping_items(user_id, updated_at);
 
--- 5. Recetas del usuario
+-- 6. Recetas del usuario (con instrucciones, pasos y tiempos detallados)
 CREATE TABLE IF NOT EXISTS user_recipes (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -72,12 +99,12 @@ CREATE TABLE IF NOT EXISTS user_recipes (
     description TEXT,
     servings INTEGER NOT NULL,
     cooking_time_minutes INTEGER NOT NULL,
+    prep_time_minutes INTEGER DEFAULT 0,
     difficulty TEXT NOT NULL,
-    ingredients_json TEXT NOT NULL, -- JSON empaquetado (menos escrituras y menos filas en D1)
-    steps_json TEXT NOT NULL,
+    ingredients_json TEXT NOT NULL,
+    steps_json TEXT NOT NULL, -- Array de pasos con instrucciones detalladas
     updated_at INTEGER NOT NULL,
     is_deleted INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_recipes_sync ON user_recipes(user_id, updated_at);
-

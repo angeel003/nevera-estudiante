@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, User } from 'lucide-react';
+import type { UserAccount } from '../types';
 
 interface HeaderProps {
   pantryCount: number;
@@ -8,6 +9,8 @@ interface HeaderProps {
   onOpenRecipes: () => void;
   pendingProposalsCount?: number;
   onOpenAdminPanel?: () => void;
+  currentUser?: UserAccount | null;
+  onOpenAuthModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +20,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRecipes,
   pendingProposalsCount = 0,
   onOpenAdminPanel,
+  currentUser,
+  onOpenAuthModal,
 }) => {
   return (
     <header className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 sticky top-0 z-20 shadow-md">
@@ -28,6 +33,19 @@ export const Header: React.FC<HeaderProps> = ({
           <p className="text-xs text-emerald-100">Control de frigo, compras y recetas</p>
         </div>
         <div className="flex items-center gap-2">
+          {onOpenAuthModal && (
+            <button
+              onClick={onOpenAuthModal}
+              title={currentUser ? `Cuenta: ${currentUser.email}` : 'Iniciar sesión'}
+              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition text-emerald-100 hover:text-white flex items-center gap-1 text-xs"
+            >
+              <User className="w-4 h-4" />
+              <span className="hidden sm:inline max-w-[90px] truncate">
+                {currentUser?.name || 'Entrar'}
+              </span>
+            </button>
+          )}
+
           {onOpenAdminPanel && (
             <button
               onClick={onOpenAdminPanel}

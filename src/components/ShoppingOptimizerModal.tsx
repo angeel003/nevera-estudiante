@@ -136,7 +136,7 @@ export const ShoppingOptimizerModal: React.FC<ShoppingOptimizerModalProps> = ({
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-xs text-slate-500 flex items-center gap-1.5 self-start sm:self-auto">
             <HelpCircle className="w-4 h-4 text-slate-400" />
-            <span>Al aceptar, estos artículos se añadirán automáticamente a tu <strong>Lista de la Compra</strong>.</span>
+            <span>Actualiza tu lista con los precios y tiendas seleccionadas <strong>sin duplicar</strong> productos.</span>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -151,7 +151,7 @@ export const ShoppingOptimizerModal: React.FC<ShoppingOptimizerModalProps> = ({
               className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-xs flex items-center justify-center gap-2 active:scale-95"
             >
               <ShoppingCart className="w-4 h-4" />
-              <span>Añadir plan a mi lista ({activePlan?.totalCost.toFixed(2)}€)</span>
+              <span>Asignar este plan ({activePlan?.totalCost.toFixed(2)}€)</span>
             </button>
           </div>
         </div>

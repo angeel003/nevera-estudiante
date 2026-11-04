@@ -40,6 +40,8 @@ import { RecipeModal } from './components/RecipeModal';
 import { SupermarketPromptModal } from './components/SupermarketPromptModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { ShoppingOptimizerModal } from './components/ShoppingOptimizerModal';
+import { AuthModal } from './components/AuthModal';
+import type { UserAccount } from './types';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'frigo' | 'compra' | 'recetas' | 'ticket'>('frigo');
@@ -54,25 +56,25 @@ export default function App() {
   const [editingPantryItem, setEditingPantryItem] = useState<PantryItem | null>(null);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showOptimizerModal, setShowOptimizerModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [optimizerIngredients, setOptimizerIngredients] = useState<{ name: string; quantity: number; unit: string }[]>([]);
   const [optimizerRecipeSource, setOptimizerRecipeSource] = useState<Recipe | undefined>(undefined);
 
-  // User identification for private database items
-  const [userId] = useState<string>(() => {
-    let id = localStorage.getItem(STORAGE_KEY_USER_ID);
-    if (!id) {
-      id = 'user_' + Math.random().toString(36).substring(2, 9);
-      localStorage.setItem(STORAGE_KEY_USER_ID, id);
-    }
-    return id;
+  // User account & session state
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    const savedEmail = localStorage.getItem(STORAGE_KEY_USER_EMAIL) || 'angelhv2003@gmail.com';
+    const savedId = localStorage.getItem(STORAGE_KEY_USER_ID) || 'usr_angel_admin';
+    const isAdminUser = ADMIN_EMAILS.includes(savedEmail.toLowerCase().trim());
+    return {
+      id: savedId,
+      email: savedEmail,
+      name: savedEmail.split('@')[0],
+      isAdmin: isAdminUser,
+    };
   });
 
-  const [userEmail] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_USER_EMAIL) || 'angelhv2003@gmail.com';
-  });
-
-  // Solo se muestra el botón y acceso al panel de administración si el email está en ADMIN_EMAILS
-  const isAdmin = ADMIN_EMAILS.includes(userEmail.toLowerCase().trim());
+  const userId = currentUser?.id || 'usr_guest';
+  const isAdmin = currentUser?.isAdmin || false;
 
   // Admin proposed food items list (with duplicate suspicion detector)
   const [adminProposals, setAdminProposals] = useState<ProposedFoodItem[]>(() => {
@@ -737,23 +739,64 @@ TOTAL 15.55 €`;
   };
 
   const handleApplyOptimizerPlan = (plan: OptimizedBasketPlan) => {
-    const newShopItems: ShoppingItem[] = [];
-
-    for (const store of plan.stores) {
-      for (const it of store.items) {
-        newShopItems.push({
-          id: 'shop_opt_' + Date.now() + Math.random().toString(36).substring(2, 6),
-          name: `${it.productName} (${store.supermarketName})`,
-          category: guessCategory(it.productName),
-          quantity: it.neededQuantity,
-          unit: it.unit,
-          estimatedPrice: it.subtotal,
-          checked: false,
-        });
-      }
+    // Si el usuario viene de la Lista de la Compra (sin receta previa), actualizamos los ítems existentes
+    // asignándoles la tienda y el precio más barato SIN DUPLICARLOS
+    if (!optimizerRecipeSource) {
+      setShoppingList(prev =>
+        prev.map(item => {
+          // Buscar qué producto y tienda le asignó el plan para este ingrediente
+          for (const store of plan.stores) {
+            const matched = store.items.find(
+              it => it.recipeIngredient.toLowerCase() === item.name.toLowerCase() ||
+                    item.name.toLowerCase().includes(it.recipeIngredient.toLowerCase())
+            );
+            if (matched) {
+              return {
+                ...item,
+                estimatedPrice: matched.subtotal,
+                assignedSupermarket: store.supermarketName,
+                assignedProductName: matched.productName,
+              };
+            }
+          }
+          return item;
+        })
+      );
+    } else {
+      // Si viene de una receta ("Para cocinar tortilla"), añadimos solo los que falten o fusionamos
+      setShoppingList(prev => {
+        const updated = [...prev];
+        for (const store of plan.stores) {
+          for (const it of store.items) {
+            const existingIdx = updated.findIndex(
+              s => s.name.toLowerCase() === it.recipeIngredient.toLowerCase()
+            );
+            if (existingIdx !== -1) {
+              updated[existingIdx] = {
+                ...updated[existingIdx],
+                estimatedPrice: it.subtotal,
+                assignedSupermarket: store.supermarketName,
+                assignedProductName: it.productName,
+              };
+            } else {
+              updated.push({
+                id: 'shop_rec_' + Date.now() + Math.random().toString(36).substring(2, 6),
+                name: it.recipeIngredient,
+                category: guessCategory(it.productName),
+                quantity: it.neededQuantity,
+                unit: it.unit,
+                estimatedPrice: it.subtotal,
+                checked: false,
+                assignedSupermarket: store.supermarketName,
+                assignedProductName: it.productName,
+              });
+            }
+          }
+        }
+        return updated;
+      });
     }
 
-    setShoppingList(prev => [...newShopItems, ...prev]);
     setShowOptimizerModal(false);
     setActiveTab('compra');
     confetti({ particleCount: 70, spread: 70 });
@@ -778,6 +821,8 @@ TOTAL 15.55 €`;
         onOpenRecipes={() => setActiveTab('recetas')}
         pendingProposalsCount={pendingProposalsCount}
         onOpenAdminPanel={isAdmin ? () => setShowAdminModal(true) : undefined}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setShowAuthModal(true)}
       />
 
       {/* Main Content View */}
@@ -903,6 +948,25 @@ TOTAL 15.55 €`;
           recipeSource={optimizerRecipeSource}
           onApplyPlanToShoppingList={handleApplyOptimizerPlan}
           onClose={() => setShowOptimizerModal(false)}
+        />
+      )}
+
+      {/* Auth Modal (Login / Registro con contraseña) */}
+      {showAuthModal && (
+        <AuthModal
+          currentUser={currentUser}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            localStorage.setItem(STORAGE_KEY_USER_ID, user.id);
+            localStorage.setItem(STORAGE_KEY_USER_EMAIL, user.email);
+            confetti({ particleCount: 50, spread: 60 });
+          }}
+          onLogout={() => {
+            setCurrentUser(null);
+            localStorage.removeItem(STORAGE_KEY_USER_EMAIL);
+            localStorage.removeItem(STORAGE_KEY_USER_ID);
+          }}
+          onClose={() => setShowAuthModal(false)}
         />
       )}
     </div>

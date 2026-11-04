@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ChefHat,
   Plus,
@@ -7,7 +7,10 @@ import {
   Trash2,
   Minus,
   UtensilsCrossed,
-  Sparkles
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  ListOrdered
 } from 'lucide-react';
 import type { Recipe, PantryItem, Category } from '../types';
 import { guessCategory } from '../mockData';
@@ -45,6 +48,8 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
   onOptimizeIngredients,
   evaluateRecipe
 }) => {
+  const [expandedStepsRecipeId, setExpandedStepsRecipeId] = useState<string | null>(null);
+
   const getRecipeServings = (recipe: Recipe): number => {
     return recipeServingsMap[recipe.id] ?? recipe.servings ?? 1;
   };
@@ -146,6 +151,11 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
                         <Clock className="w-3 h-3 text-slate-400" />
                         {recipe.cookingTimeMinutes} min
                       </span>
+                      {recipe.prepTimeMinutes !== undefined && recipe.prepTimeMinutes > 0 && (
+                        <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-md font-medium">
+                          prep: {recipe.prepTimeMinutes}m
+                        </span>
+                      )}
                       <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium capitalize">
                         {recipe.difficulty}
                       </span>
@@ -221,6 +231,36 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
                       })}
                     </div>
                   </div>
+
+                  {/* Instrucciones y pasos paso a paso */}
+                  {recipe.steps && recipe.steps.length > 0 && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedStepsRecipeId(expandedStepsRecipeId === recipe.id ? null : recipe.id)}
+                        className="text-xs font-bold text-slate-700 hover:text-amber-600 flex items-center justify-between w-full py-1 transition"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <ListOrdered className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Ver instrucciones paso a paso ({recipe.steps.length} pasos)</span>
+                        </span>
+                        {expandedStepsRecipeId === recipe.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+
+                      {expandedStepsRecipeId === recipe.id && (
+                        <div className="mt-2 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs text-slate-700 animate-fade-in">
+                          {recipe.steps.map((st, sidx) => (
+                            <div key={sidx} className="flex items-start gap-2">
+                              <span className="w-4 h-4 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                                {sidx + 1}
+                              </span>
+                              <p className="flex-1 text-[11px] leading-relaxed">{st}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Botón Cocinar y botón Optimizar dónde comprar */}
