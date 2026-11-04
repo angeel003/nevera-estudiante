@@ -7,7 +7,9 @@ import {
   Store,
   Layers,
   Sparkles,
-  X
+  X,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 import type { ProposedFoodItem } from '../types';
 
@@ -27,6 +29,26 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onClose,
 }) => {
   const [filter, setFilter] = useState<'pending' | 'all'>('pending');
+  const [dbStatus, setDbStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [dbMessage, setDbMessage] = useState<string | null>(null);
+
+  const handleInitDatabase = async () => {
+    if (!confirm('¿Deseas inicializar la base de datos Cloudflare D1 con las tablas limpias (usuarios, catálogo, despensa, etc.)?')) {
+      return;
+    }
+    setDbStatus('running');
+    setDbMessage(null);
+    try {
+      const res = await fetch('/api/init-db?key=admin');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al conectar con Cloudflare D1');
+      setDbStatus('success');
+      setDbMessage(data.message || 'Tablas creadas e inicializadas en D1 con éxito');
+    } catch (err: any) {
+      setDbStatus('error');
+      setDbMessage(err.message || 'Error de conexión');
+    }
+  };
 
   const pendingList = proposals.filter(p => p.status === 'pending');
   const displayedList = filter === 'pending' ? pendingList : proposals;
@@ -193,15 +215,42 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           )}
         </div>
 
-        {/* Pie del modal */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-          <span>Los alimentos aprobados pasan a estar disponibles en la búsqueda de tickets de todos los usuarios.</span>
-          <button
-            onClick={onClose}
-            className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-semibold transition"
-          >
-            Cerrar
-          </button>
+        {/* Pie del modal con Acciones de Sistema y D1 */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white rounded-2xl border border-slate-200">
+            <div className="flex items-center gap-2.5">
+              <Database className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-slate-800">Estructura Base de Datos D1</p>
+                <p className="text-[11px] text-slate-500">Crea o actualiza las tablas (usuarios, recetas, despensa, etc.) directamente en Cloudflare Edge.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleInitDatabase}
+              disabled={dbStatus === 'running'}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shrink-0 disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${dbStatus === 'running' ? 'animate-spin' : ''}`} />
+              <span>{dbStatus === 'running' ? 'Aplicando SQL...' : 'Inicializar Tablas D1'}</span>
+            </button>
+          </div>
+
+          {dbMessage && (
+            <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 font-medium ${dbStatus === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+              {dbStatus === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />}
+              <span>{dbMessage}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+            <span>Los alimentos aprobados pasan a estar disponibles en la búsqueda de tickets de todos los usuarios.</span>
+            <button
+              onClick={onClose}
+              className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-semibold transition"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </div>
     </div>
