@@ -124,6 +124,8 @@ export function findProductOffersAcrossStores(
     { id: 'dia', name: 'Día', brand: 'Día', priceFactor: 0.95 },
     { id: 'carrefour', name: 'Carrefour', brand: 'Carrefour Classic', priceFactor: 1.05 },
     { id: 'lidl', name: 'Lidl', brand: 'Milbona / Combino', priceFactor: 0.94 },
+    { id: 'aldi', name: 'Aldi', brand: 'Milsani / GutBio', priceFactor: 0.95 },
+    { id: 'gadis', name: 'Gadis', brand: 'Gadis Selección', priceFactor: 1.02 },
   ];
 
   for (const store of knownStores) {
@@ -209,6 +211,8 @@ export function generateOptimizedShoppingPlans(
     { id: 'dia', name: 'Día' },
     { id: 'carrefour', name: 'Carrefour' },
     { id: 'lidl', name: 'Lidl' },
+    { id: 'aldi', name: 'Aldi' },
+    { id: 'gadis', name: 'Gadis' },
   ];
 
   for (const targetStore of singleStoreCandidates) {

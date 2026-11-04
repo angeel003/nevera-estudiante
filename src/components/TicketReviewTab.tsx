@@ -83,6 +83,8 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
               <option value="dia">Día</option>
               <option value="carrefour">Carrefour</option>
               <option value="lidl">Lidl</option>
+              <option value="aldi">Aldi</option>
+              <option value="gadis">Gadis</option>
               <option value="alcampo">Alcampo</option>
               <option value="eroski">Eroski</option>
               <option value="otro">Otro súper / Tienda</option>
@@ -114,11 +116,19 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
           </button>
         </div>
 
-        {/* Share target info banner */}
-        <div className="bg-sky-50 border border-sky-200 rounded-2xl p-2.5 flex items-start gap-2 text-[11px] text-sky-800">
-          <Share2 className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <strong>Consejo para tickets digitales de Día, Lidl o Carrefour:</strong> Dale a "Compartir PDF" en su app oficial y selecciona esta web para revisarlo al momento.
+        {/* Share target & digital ticket tip banner */}
+        <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-3 space-y-1.5 text-xs text-sky-900">
+          <div className="flex items-center gap-2 font-bold text-sky-800">
+            <Share2 className="w-4 h-4 text-sky-600 shrink-0" />
+            <span>¿Tienes ticket digital (Día, Lidl, Carrefour, Aldi, Gadis...)?</span>
+          </div>
+          <div className="text-[11px] text-sky-700 leading-relaxed space-y-1">
+            <p>
+              • <strong>Vía directa:</strong> Descarga el PDF o captura desde la app de tu súper y pulsa en <strong>"Subir foto o PDF"</strong>.
+            </p>
+            <p>
+              • <strong>Compartir al vuelo (Android):</strong> Si añades esta web a la pantalla de inicio (menú del navegador <strong>⋮</strong> &gt; <em>Instalar aplicación</em>), aparecerá en el menú <em>"Compartir con..."</em> de tu móvil al compartir tickets PDF.
+            </p>
           </div>
         </div>
       </div>

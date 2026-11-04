@@ -677,5 +677,115 @@ export const REAL_SPANISH_PRODUCTS: RealProductEntry[] = [
     "unit": "uds",
     "price": 1.57,
     "patterns": "lenteja|lentejas"
+  },
+  {
+    "id": "aldi_huevos",
+    "name": "Huevos camperos M/L GutBio",
+    "brand": "GutBio / Aldi",
+    "supermarketId": "aldi",
+    "supermarketName": "Aldi",
+    "category": "lacteos",
+    "unit": "uds",
+    "price": 3.19,
+    "patterns": "huevo|huevos"
+  },
+  {
+    "id": "gadis_huevos",
+    "name": "Huevos camperos Galicia Calidade",
+    "brand": "Gadis Selección",
+    "supermarketId": "gadis",
+    "supermarketName": "Gadis",
+    "category": "lacteos",
+    "unit": "uds",
+    "price": 3.29,
+    "patterns": "huevo|huevos"
+  },
+  {
+    "id": "aldi_leche",
+    "name": "Leche entera Milsani",
+    "brand": "Milsani / Aldi",
+    "supermarketId": "aldi",
+    "supermarketName": "Aldi",
+    "category": "lacteos",
+    "unit": "L",
+    "price": 0.99,
+    "patterns": "leche"
+  },
+  {
+    "id": "gadis_leche",
+    "name": "Leche entera Feiraco / Gadis",
+    "brand": "Gadis",
+    "supermarketId": "gadis",
+    "supermarketName": "Gadis",
+    "category": "lacteos",
+    "unit": "L",
+    "price": 1.05,
+    "patterns": "leche"
+  },
+  {
+    "id": "aldi_pollo",
+    "name": "Pechuga de pollo fileteada limpia",
+    "brand": "Aldi",
+    "supermarketId": "aldi",
+    "supermarketName": "Aldi",
+    "category": "carne-pescado",
+    "unit": "g",
+    "price": 5.49,
+    "patterns": "pollo|pechuga"
+  },
+  {
+    "id": "gadis_pollo",
+    "name": "Pechuga de pollo fresca de Galicia",
+    "brand": "Gadis",
+    "supermarketId": "gadis",
+    "supermarketName": "Gadis",
+    "category": "carne-pescado",
+    "unit": "g",
+    "price": 5.65,
+    "patterns": "pollo|pechuga"
+  },
+  {
+    "id": "aldi_arroz",
+    "name": "Arroz redondo La Tabla",
+    "brand": "Aldi",
+    "supermarketId": "aldi",
+    "supermarketName": "Aldi",
+    "category": "despensa",
+    "unit": "g",
+    "price": 1.25,
+    "patterns": "arroz"
+  },
+  {
+    "id": "gadis_arroz",
+    "name": "Arroz redondo extra Gadis",
+    "brand": "Gadis",
+    "supermarketId": "gadis",
+    "supermarketName": "Gadis",
+    "category": "despensa",
+    "unit": "g",
+    "price": 1.29,
+    "patterns": "arroz"
+  },
+  {
+    "id": "aldi_pasta",
+    "name": "Macarrones pluma El Cultivador",
+    "brand": "Aldi",
+    "supermarketId": "aldi",
+    "supermarketName": "Aldi",
+    "category": "despensa",
+    "unit": "g",
+    "price": 0.85,
+    "patterns": "pasta|macarron|macarrones"
+  },
+  {
+    "id": "gadis_pasta",
+    "name": "Macarrones clásicos Gadis",
+    "brand": "Gadis",
+    "supermarketId": "gadis",
+    "supermarketName": "Gadis",
+    "category": "despensa",
+    "unit": "g",
+    "price": 0.89,
+    "patterns": "pasta|macarron|macarrones"
   }
 ];

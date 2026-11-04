@@ -91,7 +91,7 @@ export interface UserAccount {
   isAdmin: boolean;
 }
 
-export type Supermarket = 'mercadona' | 'carrefour' | 'lidl' | 'dia' | 'alcampo' | 'eroski' | 'otro' | string;
+export type Supermarket = 'mercadona' | 'carrefour' | 'lidl' | 'dia' | 'alcampo' | 'eroski' | 'gadis' | 'aldi' | 'otro' | string;
 
 export interface TicketReviewItem {
   id: string;

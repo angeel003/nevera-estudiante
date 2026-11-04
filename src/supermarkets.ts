@@ -98,6 +98,35 @@ export const SUPERMARKET_CATALOGS: Record<string, SupermarketCatalog> = {
       'leche eroski': { normalizedName: 'Leche Eroski Basic', category: 'lacteos', unit: 'L', defaultPrice: 1.01 },
       'pechuga pollo eroski': { normalizedName: 'Pechuga de Pollo Eroski Natur', category: 'carne-pescado', unit: 'g', defaultPrice: 4.45 },
     }
+  },
+  gadis: {
+    id: 'gadis',
+    name: 'Gadis',
+    aliases: ['gadis', 'gadisa', 'gadis hiper', 'gallega de distribucion alimentaria', 'a-15024479', 'a15024479'],
+    patterns: {
+      'huev|huevos gadis': { normalizedName: 'Huevos Selección Gadis', category: 'lacteos', unit: 'uds', defaultPrice: 2.35 },
+      'leche gadis|leche entera|leche semidesnatada|larsa|feiraco': { normalizedName: 'Leche Gallega Gadis', category: 'lacteos', unit: 'L', defaultPrice: 1.02 },
+      'pechuga pollo|pollo gadis': { normalizedName: 'Pechuga de Pollo Fresca Gadis', category: 'carne-pescado', unit: 'g', defaultPrice: 4.39 },
+      'platano canarias': { normalizedName: 'Plátano de Canarias Gadis', category: 'fruta-verdura', unit: 'kg', defaultPrice: 1.85 },
+      'tomate frito gadis': { normalizedName: 'Tomate Frito Casero Gadis', category: 'despensa', unit: 'uds', defaultPrice: 0.85 },
+      'pasta|macarron gadis': { normalizedName: 'Macarrones Gadis', category: 'despensa', unit: 'g', defaultPrice: 0.89 },
+      'atun claro gadis': { normalizedName: 'Atún Claro en Aceite Gadis', category: 'carne-pescado', unit: 'uds', defaultPrice: 2.15 },
+    }
+  },
+  aldi: {
+    id: 'aldi',
+    name: 'Aldi',
+    aliases: ['aldi', 'aldi central de compras', 'milsani', 'gut bio', 'el cultivador', 'la tabla', 'b-60721248', 'b60721248'],
+    patterns: {
+      'huev|huevos aldi|huevos gut bio': { normalizedName: 'Huevos Frescos Clase M/L Aldi', category: 'lacteos', unit: 'uds', defaultPrice: 2.29 },
+      'leche milsani|milsani leche': { normalizedName: 'Leche Milsani Aldi', category: 'lacteos', unit: 'L', defaultPrice: 0.99 },
+      'pechuga pollo aldi': { normalizedName: 'Pechuga de Pollo Fileteada Aldi', category: 'carne-pescado', unit: 'g', defaultPrice: 4.29 },
+      'platano canarias aldi': { normalizedName: 'Plátano de Canarias Aldi', category: 'fruta-verdura', unit: 'kg', defaultPrice: 1.79 },
+      'tomate frito aldi|el cultivador': { normalizedName: 'Tomate Frito El Cultivador Aldi', category: 'despensa', unit: 'uds', defaultPrice: 0.79 },
+      'pasta combino|macarrones aldi|el cultivador': { normalizedName: 'Macarrones El Cultivador Aldi', category: 'despensa', unit: 'g', defaultPrice: 0.85 },
+      'atun aldi|almare': { normalizedName: 'Atún Claro en Aceite Almare Aldi', category: 'carne-pescado', unit: 'uds', defaultPrice: 2.09 },
+      'queso aldi|milsani': { normalizedName: 'Queso Rallado Milsani Aldi', category: 'lacteos', unit: 'uds', defaultPrice: 1.69 },
+    }
   }
 };
 

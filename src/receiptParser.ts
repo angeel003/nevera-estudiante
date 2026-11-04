@@ -31,6 +31,8 @@ export function parseReceiptText(text: string, supermarketId?: string): ParsedTi
       lower.includes('lidl') ||
       lower.includes('alcampo') ||
       lower.includes('eroski') ||
+      lower.includes('gadis') ||
+      lower.includes('aldi') ||
       lower.includes('cif') ||
       lower.includes('factura') ||
       lower.includes('fecha') ||
