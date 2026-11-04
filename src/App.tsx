@@ -19,7 +19,6 @@ import {
   STORAGE_KEY_USER_ID,
   STORAGE_KEY_USER_EMAIL,
   ADMIN_EMAILS,
-  getOffsetDate,
   getDaysRemaining
 } from './utils/constants';
 import { INITIAL_RECIPES, guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
@@ -80,72 +79,54 @@ export default function App() {
   const [adminProposals, setAdminProposals] = useState<ProposedFoodItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_ADMIN_PROPOSALS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return [
-      {
-        id: 'prop_demo_1',
-        userId: 'user_estudiante_12',
-        userEmail: 'estudiante@universidad.es',
-        name: 'Huevos Camperos L 12U',
-        supermarket: 'mercadona',
-        category: 'lacteos',
-        unit: 'uds',
-        price: 2.45,
-        createdAt: new Date().toISOString(),
-        status: 'pending',
-        duplicateSuspect: {
-          existingId: 'mercadona_huevos',
-          existingName: 'Huevos Camperos',
-          similarity: 92,
-          reason: 'Mismo supermercado (Mercadona) y nombre prácticamente idéntico (92% de coincidencia).'
+      try {
+        const parsed = JSON.parse(saved);
+        const isLegacyDemo = Array.isArray(parsed) && parsed.some(item => item.id === 'prop_demo_1');
+        if (isLegacyDemo) {
+          localStorage.removeItem(STORAGE_KEY_ADMIN_PROPOSALS);
+          return [];
         }
-      },
-      {
-        id: 'prop_demo_2',
-        userId: 'user_juan_44',
-        userEmail: 'juan@gmail.com',
-        name: 'Tofu Natural Bio',
-        supermarket: 'dia',
-        category: 'despensa',
-        unit: 'uds',
-        price: 1.89,
-        createdAt: new Date().toISOString(),
-        status: 'pending'
-      }
-    ];
+        return parsed;
+      } catch (e) { /* ignore */ }
+    }
+    return [];
   });
 
   // Dynamic servings multiplier state per recipe (e.g. { 'r1': 2, 'r2': 3 })
   const [recipeServingsMap, setRecipeServingsMap] = useState<Record<string, number>>({});
 
-  // State: Pantry with localStorage persistence
+  // State: Pantry with localStorage persistence (starts completely clean)
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_PANTRY);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+      try {
+        const parsed = JSON.parse(saved);
+        const isLegacyDemo = Array.isArray(parsed) && parsed.length <= 6 && parsed.some(item => item.id === 'p1');
+        if (isLegacyDemo) {
+          localStorage.removeItem(STORAGE_KEY_PANTRY);
+          return [];
+        }
+        return parsed;
+      } catch (e) { /* ignore */ }
     }
-    return [
-      { id: 'p1', name: 'Huevos Camperos', category: 'lacteos', quantity: 6, unit: 'uds', price: 2.45, expiryDate: getOffsetDate(12), addedAt: new Date().toISOString() },
-      { id: 'p2', name: 'Leche Semidesnatada', category: 'lacteos', quantity: 2, unit: 'L', price: 1.95, expiryDate: getOffsetDate(2), addedAt: new Date().toISOString() },
-      { id: 'p3', name: 'Pechuga de Pollo', category: 'carne-pescado', quantity: 400, unit: 'g', price: 4.20, expiryDate: getOffsetDate(1), addedAt: new Date().toISOString() },
-      { id: 'p4', name: 'Tomate Frito', category: 'despensa', quantity: 1, unit: 'g', price: 0.85, expiryDate: getOffsetDate(90), addedAt: new Date().toISOString() },
-      { id: 'p5', name: 'Pasta Macarrones', category: 'despensa', quantity: 400, unit: 'g', price: 0.90, expiryDate: getOffsetDate(180), addedAt: new Date().toISOString() },
-      { id: 'p6', name: 'Atún en lata', category: 'carne-pescado', quantity: 3, unit: 'uds', price: 2.10, expiryDate: getOffsetDate(240), addedAt: new Date().toISOString() },
-    ];
+    return [];
   });
 
-  // State: Shopping List with localStorage persistence
+  // State: Shopping List with localStorage persistence (starts completely clean)
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_SHOPPING);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+      try {
+        const parsed = JSON.parse(saved);
+        const isLegacyDemo = Array.isArray(parsed) && parsed.length <= 3 && parsed.some(item => item.id === 's1');
+        if (isLegacyDemo) {
+          localStorage.removeItem(STORAGE_KEY_SHOPPING);
+          return [];
+        }
+        return parsed;
+      } catch (e) { /* ignore */ }
     }
-    return [
-      { id: 's1', name: 'Patatas', category: 'fruta-verdura', quantity: 1, unit: 'kg', estimatedPrice: 1.60, checked: false },
-      { id: 's2', name: 'Cebolla', category: 'fruta-verdura', quantity: 2, unit: 'uds', estimatedPrice: 1.10, checked: false },
-      { id: 's3', name: 'Queso Rallado', category: 'lacteos', quantity: 1, unit: 'uds', estimatedPrice: 1.85, checked: false },
-    ];
+    return [];
   });
 
   // State: Custom Recipes with localStorage persistence
