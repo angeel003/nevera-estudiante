@@ -60,6 +60,13 @@ export default function App() {
   const [showOptimizerModal, setShowOptimizerModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShareFridgeModal, setShowShareFridgeModal] = useState(false);
+  const [isViewerMode, setIsViewerMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('viewer') === 'true';
+    }
+    return false;
+  });
   const [optimizerIngredients, setOptimizerIngredients] = useState<{ name: string; quantity: number; unit: string }[]>([]);
   const [optimizerRecipeSource, setOptimizerRecipeSource] = useState<Recipe | undefined>(undefined);
 
@@ -892,6 +899,8 @@ TOTAL 15.55 €`;
         onOpenAuthModal={() => setShowAuthModal(true)}
         onOpenShareFridge={() => setShowShareFridgeModal(true)}
         householdName={household.name}
+        isViewerMode={isViewerMode}
+        onExitViewerMode={() => setIsViewerMode(false)}
       />
 
       {/* Main Content View */}
@@ -909,6 +918,7 @@ TOTAL 15.55 €`;
             householdName={household.name}
             householdMembersCount={household.members.length}
             onOpenShareFridge={() => setShowShareFridgeModal(true)}
+            isViewerMode={isViewerMode}
           />
         )}
 
@@ -1043,7 +1053,7 @@ TOTAL 15.55 €`;
         />
       )}
 
-      {/* Share Fridge Modal (Piso Compartido / Pareja / Vault) */}
+      {/* Share Fridge Modal (Piso Compartido / Pareja / Vault / Vista Mamá) */}
       {showShareFridgeModal && (
         <ShareFridgeModal
           currentUser={currentUser}
@@ -1053,6 +1063,8 @@ TOTAL 15.55 €`;
           onLeaveHousehold={handleLeaveHousehold}
           onClose={() => setShowShareFridgeModal(false)}
           onOpenAuth={() => setShowAuthModal(true)}
+          isViewerMode={isViewerMode}
+          onToggleViewerMode={setIsViewerMode}
         />
       )}
     </div>

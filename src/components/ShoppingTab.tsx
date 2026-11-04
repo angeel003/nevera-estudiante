@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ArrowRight, Sparkles, Store, Filter } from 'lucide-react';
 import type { ShoppingItem } from '../types';
+import { useDragScroll } from '../utils/useDragScroll';
 
 interface ShoppingTabProps {
   shoppingList: ShoppingItem[];
@@ -28,6 +29,7 @@ export const ShoppingTab: React.FC<ShoppingTabProps> = ({
   onOpenOptimizer
 }) => {
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>('todos');
+  const storeScrollRef = useDragScroll<HTMLDivElement>();
 
   const hasChecked = shoppingList.some(item => item.checked);
   const totalCost = shoppingList.reduce((acc, item) => acc + (item.estimatedPrice || 0), 0);
@@ -100,9 +102,12 @@ export const ShoppingTab: React.FC<ShoppingTabProps> = ({
         </button>
       </form>
 
-      {/* Filtro por supermercado asignado (si los hay) */}
+      {/* Filtro por supermercado asignado con Drag Scroll */}
       {assignedStores.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+        <div
+          ref={storeScrollRef}
+          className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs drag-scroll"
+        >
           <span className="text-slate-400 font-semibold flex items-center gap-1 mr-1">
             <Filter className="w-3 h-3" /> Ver:
           </span>

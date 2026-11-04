@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { Recipe, PantryItem, Category } from '../types';
 import { guessCategory } from '../mockData';
+import { useDragScroll } from '../utils/useDragScroll';
 
 interface RecipesTabProps {
   recipes: Recipe[];
@@ -49,6 +50,7 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
   evaluateRecipe
 }) => {
   const [expandedStepsRecipeId, setExpandedStepsRecipeId] = useState<string | null>(null);
+  const categoryScrollRef = useDragScroll<HTMLDivElement>();
 
   const getRecipeServings = (recipe: Recipe): number => {
     return recipeServingsMap[recipe.id] ?? recipe.servings ?? 1;
@@ -82,8 +84,11 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
         </button>
       </div>
 
-      {/* Filtros rápidos por categoría de ingrediente */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+      {/* Filtros rápidos por categoría de ingrediente con Drag Scroll */}
+      <div
+        ref={categoryScrollRef}
+        className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar drag-scroll"
+      >
         {[
           { id: 'todos', label: 'Todas', emoji: '✨' },
           { id: 'despensa', label: 'Pasta / Arroz', emoji: '🥫' },

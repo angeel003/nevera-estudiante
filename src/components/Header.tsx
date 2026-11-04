@@ -13,6 +13,8 @@ interface HeaderProps {
   onOpenAuthModal?: () => void;
   onOpenShareFridge?: () => void;
   householdName?: string;
+  isViewerMode?: boolean;
+  onExitViewerMode?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +28,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuthModal,
   onOpenShareFridge,
   householdName,
+  isViewerMode,
+  onExitViewerMode,
 }) => {
   return (
     <header className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white p-3.5 sm:px-6 sticky top-0 z-20 shadow-md">
@@ -37,6 +41,16 @@ export const Header: React.FC<HeaderProps> = ({
           <p className="text-[11px] sm:text-xs text-emerald-100/90 truncate">Control de frigo, compras y recetas</p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {isViewerMode && onExitViewerMode && (
+            <button
+              onClick={onExitViewerMode}
+              className="p-1.5 px-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 transition text-white flex items-center gap-1 text-xs font-bold shadow-xs active:scale-95"
+              title="Salir del modo espectador"
+            >
+              <span>Salir de solo lectura</span>
+            </button>
+          )}
+
           {onOpenShareFridge && (
             <button
               onClick={onOpenShareFridge}

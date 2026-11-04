@@ -18,6 +18,7 @@ import {
 import type { PantryItem, Category } from '../types';
 import { CATEGORIES, getDaysRemaining, getOffsetDate } from '../utils/constants';
 import { guessCategory, guessUnit, getDefaultExpiryDate } from '../mockData';
+import { useDragScroll } from '../utils/useDragScroll';
 
 interface PantryTabProps {
   pantry: PantryItem[];
@@ -31,6 +32,7 @@ interface PantryTabProps {
   householdName?: string;
   householdMembersCount?: number;
   onOpenShareFridge?: () => void;
+  isViewerMode?: boolean;
 }
 
 export const PantryTab: React.FC<PantryTabProps> = ({
@@ -44,8 +46,12 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   currentUserId,
   householdName = 'Mi Frigorífico',
   householdMembersCount = 1,
-  onOpenShareFridge
+  onOpenShareFridge,
+  isViewerMode = false
 }) => {
+  const categoryScrollRef = useDragScroll<HTMLDivElement>();
+  const locationScrollRef = useDragScroll<HTMLDivElement>();
+
   const [name, setName] = useState('');
   const [qty, setQty] = useState(1);
   const [unit, setUnit] = useState('uds');
@@ -157,56 +163,84 @@ export const PantryTab: React.FC<PantryTabProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Barra superior de Modo: Frigo Compartido vs Mi Bóveda (Vault) */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-        <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setVaultView('shared')}
-            className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
-              vaultView === 'shared'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Home className="w-3.5 h-3.5" />
-            <span>Frigo Compartido</span>
-            <span className="text-[10px] bg-white/25 px-1.5 py-0.2 rounded-full font-black ml-0.5">
-              {sharedItemsCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setVaultView('vault')}
-            className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
-              vaultView === 'vault'
-                ? 'bg-purple-700 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5 text-amber-300" />
-            <span>Mi Bóveda (Vault)</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5 ${vaultView === 'vault' ? 'bg-white/25' : 'bg-purple-100 text-purple-800'}`}>
-              {vaultItemsCount}
-            </span>
-          </button>
+      {/* Banner de Modo Espectador (Vista Mamá / Familia) */}
+      {isViewerMode && (
+        <div className="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 text-rose-950 p-3 sm:p-3.5 rounded-2xl text-xs flex items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">👩‍🍳</span>
+            <div>
+              <p className="font-bold">Vista Familiar de Solo Lectura ("Vista Mamá")</p>
+              <p className="text-[11px] text-rose-800">
+                Viendo la comida y tuppers disponibles. Alimentos privados protegidos en bóveda.
+              </p>
+            </div>
+          </div>
+          {onOpenShareFridge && (
+            <button
+              onClick={onOpenShareFridge}
+              className="px-2.5 py-1 bg-white border border-rose-300 text-rose-800 text-[11px] font-bold rounded-lg shadow-2xs hover:bg-rose-100 transition shrink-0"
+            >
+              Opciones
+            </button>
+          )}
         </div>
+      )}
 
-        {onOpenShareFridge && (
-          <button
-            type="button"
-            onClick={onOpenShareFridge}
-            className="text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
-          >
-            <Users className="w-3.5 h-3.5 text-emerald-600" />
-            <span>{householdName} ({householdMembersCount} {householdMembersCount === 1 ? 'persona' : 'personas'})</span>
-          </button>
-        )}
-      </div>
+      {/* Barra superior de Modo: Frigo Compartido vs Mi Bóveda (Vault) */}
+      {!isViewerMode && (
+        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setVaultView('shared')}
+              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                vaultView === 'shared'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>Frigo Compartido</span>
+              <span className="text-[10px] bg-white/25 px-1.5 py-0.2 rounded-full font-black ml-0.5">
+                {sharedItemsCount}
+              </span>
+            </button>
 
-      {/* Subfiltros por Ubicación Física: Nevera / Congelador / Despensa */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+            <button
+              type="button"
+              onClick={() => setVaultView('vault')}
+              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                vaultView === 'vault'
+                  ? 'bg-purple-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-300" />
+              <span>Mi Bóveda (Vault)</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5 ${vaultView === 'vault' ? 'bg-white/25' : 'bg-purple-100 text-purple-800'}`}>
+                {vaultItemsCount}
+              </span>
+            </button>
+          </div>
+
+          {onOpenShareFridge && (
+            <button
+              type="button"
+              onClick={onOpenShareFridge}
+              className="text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{householdName} ({householdMembersCount} {householdMembersCount === 1 ? 'persona' : 'personas'})</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Subfiltros por Ubicación Física con Drag Scroll */}
+      <div
+        ref={locationScrollRef}
+        className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs drag-scroll"
+      >
         <button
           type="button"
           onClick={() => setLocationFilter('todos')}
@@ -271,70 +305,71 @@ export const PantryTab: React.FC<PantryTabProps> = ({
         </div>
       )}
 
-      {/* Quick Add Form */}
-      <form onSubmit={handleSubmit} className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200 space-y-2.5">
-        <div className="flex justify-between items-center">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            Añadir al frigorífico o congelador
-          </label>
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-lg flex items-center gap-1 transition"
-          >
-            <Activity className="w-3 h-3" />
-            {showAdvanced ? 'Menos opciones' : '+ Nutrición y Tuppers'}
-            {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        </div>
+      {/* Quick Add Form (Oculto en modo espectador/madre) */}
+      {!isViewerMode && (
+        <form onSubmit={handleSubmit} className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200 space-y-2.5">
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+              Añadir al frigorífico o congelador
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-lg flex items-center gap-1 transition"
+            >
+              <Activity className="w-3 h-3" />
+              {showAdvanced ? 'Menos opciones' : '+ Nutrición y Tuppers'}
+              {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
 
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Producto o plato (ej: Pollo al curry, Tupper lentejas...)"
-            value={name}
-            onChange={e => {
-              const val = e.target.value;
-              setName(val);
-              if (val.length > 2) {
-                const lower = val.toLowerCase();
-                if (lower.match(/tupper|preparad|guiso|sobra|sopa|lasaña|lentejas cocinadas/)) {
-                  setCategory('comida-preparada');
-                  setIsPrepared(true);
-                } else if (lower.match(/congelad|helado/)) {
-                  setCategory('congelados');
-                  setIsFrozen(true);
-                } else {
-                  setCategory(guessCategory(val));
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Producto o plato (ej: Pollo al curry, Tupper lentejas...)"
+              value={name}
+              onChange={e => {
+                const val = e.target.value;
+                setName(val);
+                if (val.length > 2) {
+                  const lower = val.toLowerCase();
+                  if (lower.match(/tupper|preparad|guiso|sobra|sopa|lasaña|lentejas cocinadas/)) {
+                    setCategory('comida-preparada');
+                    setIsPrepared(true);
+                  } else if (lower.match(/congelad|helado/)) {
+                    setCategory('congelados');
+                    setIsFrozen(true);
+                  } else {
+                    setCategory(guessCategory(val));
+                  }
+                  setUnit(guessUnit(val));
                 }
-                setUnit(guessUnit(val));
-              }
-            }}
-            className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-          <input
-            type="number"
-            min="1"
-            value={qty}
-            onChange={e => setQty(Number(e.target.value))}
-            className="w-14 bg-slate-50 border border-slate-300 rounded-xl px-1 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            title="Cantidad"
-          />
-          <select
-            value={unit}
-            onChange={e => setUnit(e.target.value)}
-            className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-1.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="uds">uds</option>
-            <option value="tupper">tupper</option>
-            <option value="raciones">raciones</option>
-            <option value="g">g</option>
-            <option value="kg">kg</option>
-            <option value="ml">ml</option>
-            <option value="L">L</option>
-            <option value="paquete">paq.</option>
-          </select>
-        </div>
+              }}
+              className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <input
+              type="number"
+              min="1"
+              value={qty}
+              onChange={e => setQty(Number(e.target.value))}
+              className="w-14 bg-slate-50 border border-slate-300 rounded-xl px-1 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 shrink-0"
+              title="Cantidad"
+            />
+            <select
+              value={unit}
+              onChange={e => setUnit(e.target.value)}
+              className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-1.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 shrink-0"
+            >
+              <option value="uds">uds</option>
+              <option value="tupper">tupper</option>
+              <option value="raciones">raciones</option>
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+              <option value="ml">ml</option>
+              <option value="L">L</option>
+              <option value="paquete">paq.</option>
+            </select>
+          </div>
 
         {/* Campos secundarios responsive sin desbordamiento */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-0.5 text-xs">
@@ -539,9 +574,13 @@ export const PantryTab: React.FC<PantryTabProps> = ({
           </div>
         )}
       </form>
+      )}
 
-      {/* Category Filter Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+      {/* Category Filter Pills con Drag Scroll */}
+      <div
+        ref={categoryScrollRef}
+        className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar drag-scroll"
+      >
         {CATEGORIES.map(cat => (
           <button
             key={cat.id}
@@ -696,36 +735,44 @@ export const PantryTab: React.FC<PantryTabProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onUpdateQuantity(item.id, -1)}
-                    title="Gastar 1"
-                    className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-xs active:scale-95 transition"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => onUpdateQuantity(item.id, 1)}
-                    title="Sumar 1"
-                    className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-xs active:scale-95 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => onEditItem(item)}
-                    title="Modificar alimento"
-                    className="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center active:scale-95 transition ml-0.5"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onRemoveItem(item.id)}
-                    title="Eliminar"
-                    className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {!isViewerMode ? (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => onUpdateQuantity(item.id, -1)}
+                      title="Gastar 1"
+                      className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 flex items-center justify-center font-bold text-xs active:scale-95 transition"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => onUpdateQuantity(item.id, 1)}
+                      title="Sumar 1"
+                      className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 flex items-center justify-center font-bold text-xs active:scale-95 transition"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => onEditItem(item)}
+                      title="Modificar alimento"
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center active:scale-95 transition ml-0.5"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onRemoveItem(item.id)}
+                      title="Eliminar"
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center active:scale-95 transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="shrink-0 text-right">
+                    <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
+                      {item.quantity} {item.unit}
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}

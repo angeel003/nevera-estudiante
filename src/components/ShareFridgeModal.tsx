@@ -9,9 +9,11 @@ import {
   Lock,
   Sparkles,
   X,
-  Home,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  Heart,
+  Share2
 } from 'lucide-react';
 import type { HouseholdInfo, UserAccount } from '../types';
 
@@ -22,7 +24,9 @@ interface ShareFridgeModalProps {
   onJoinHousehold: (code: string) => Promise<{ success: boolean; message: string }>;
   onLeaveHousehold: () => void;
   onClose: () => void;
-  onOpenAuth: () => void;
+  onOpenAuth?: () => void;
+  isViewerMode?: boolean;
+  onToggleViewerMode?: (active: boolean) => void;
 }
 
 export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
@@ -32,20 +36,34 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
   onJoinHousehold,
   onLeaveHousehold,
   onClose,
-  onOpenAuth
+  onOpenAuth: _onOpenAuth,
+  isViewerMode = false,
+  onToggleViewerMode
 }) => {
-  const [activeTab, setActiveTab] = useState<'invite' | 'join'>('invite');
+  const [activeTab, setActiveTab] = useState<'family' | 'roommates' | 'join'>('family');
   const [joinCodeInput, setJoinCodeInput] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [householdNameInput, setHouseholdNameInput] = useState(household.name);
 
+  // Generar enlace directo de solo lectura para madre / familiar
+  const viewerLink = typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}?viewer=true&owner=${encodeURIComponent(currentUser?.name || 'angel')}`
+    : `https://myfridge.pages.dev/?viewer=true`;
+
   const handleCopyCode = () => {
     navigator.clipboard.writeText(household.inviteCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2500);
+  };
+
+  const handleCopyViewerLink = () => {
+    navigator.clipboard.writeText(viewerLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   const handleJoin = async (e: React.FormEvent) => {
@@ -85,17 +103,14 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
         <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white p-4 sm:p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shadow-xs">
-              <Users className="w-5 h-5" />
+              <Share2 className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold flex items-center gap-1.5">
-                <span>Frigo Compartido</span>
-                <span className="text-[10px] bg-white/25 text-white font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Piso / Pareja
-                </span>
+                <span>Compartir Frigorífico</span>
               </h2>
               <p className="text-xs text-emerald-100">
-                Comparte lo que hay en la nevera o mantén alimentos en tu Bóveda Privada
+                Elige si quieres compartirlo como solo lectura o colaborar juntos
               </p>
             </div>
           </div>
@@ -107,51 +122,51 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
           </button>
         </div>
 
-        {/* Banner de inicio de sesión si es invitado */}
-        {!currentUser && (
-          <div className="bg-amber-50 border-b border-amber-200 p-3 sm:px-5 flex items-center justify-between text-xs text-amber-900">
-            <span>Para sincronizar el frigo en tiempo real con otra persona es recomendable iniciar sesión.</span>
-            <button
-              onClick={() => {
-                onClose();
-                onOpenAuth();
-              }}
-              className="font-bold underline text-amber-950 ml-2 shrink-0"
-            >
-              Iniciar sesión
-            </button>
-          </div>
-        )}
-
-        {/* Selector de pestañas */}
-        <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-semibold">
+        {/* Selector de pestañas diferenciadas */}
+        <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-semibold overflow-x-auto no-scrollbar">
           <button
             onClick={() => {
-              setActiveTab('invite');
+              setActiveTab('family');
               setFeedback(null);
             }}
-            className={`flex-1 py-3 text-center border-b-2 transition flex items-center justify-center gap-1.5 ${
-              activeTab === 'invite'
+            className={`flex-1 py-3 px-2 text-center border-b-2 transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'family'
                 ? 'border-emerald-600 text-emerald-800 bg-white font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Home className="w-3.5 h-3.5" />
-            <span>Mi Frigo Compartido</span>
+            <Heart className="w-3.5 h-3.5 text-rose-500" />
+            <span>Familiar / Vista Mamá (Solo Ver)</span>
           </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('roommates');
+              setFeedback(null);
+            }}
+            className={`flex-1 py-3 px-2 text-center border-b-2 transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'roommates'
+                ? 'border-emerald-600 text-emerald-800 bg-white font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-teal-600" />
+            <span>Piso Compartido (Colaborar)</span>
+          </button>
+
           <button
             onClick={() => {
               setActiveTab('join');
               setFeedback(null);
             }}
-            className={`flex-1 py-3 text-center border-b-2 transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-3 px-2 text-center border-b-2 transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'join'
                 ? 'border-emerald-600 text-emerald-800 bg-white font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Unirme a otro Frigo</span>
+            <UserPlus className="w-3.5 h-3.5 text-slate-600" />
+            <span>Unirme</span>
           </button>
         </div>
 
@@ -174,7 +189,56 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
             </div>
           )}
 
-          {activeTab === 'invite' ? (
+          {/* 1. MODO FAMILIAR (VISTA MAMÁ / SOLO LECTURA) */}
+          {activeTab === 'family' && (
+            <div className="space-y-4">
+              <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+                  <Eye className="w-4 h-4 text-rose-600" />
+                  <span>Enlace de Solo Lectura para Familiares</span>
+                </div>
+                <p className="text-xs text-rose-900 leading-relaxed">
+                  Tu madre o familiar puede abrir este enlace desde su móvil para <strong>ver qué comida y tuppers te quedan</strong> en el frigo y congelador, sin que pueda borrar ni modificar nada por error.
+                </p>
+                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <button
+                    onClick={handleCopyViewerLink}
+                    className="flex-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition"
+                  >
+                    {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace para WhatsApp / Mamá'}</span>
+                  </button>
+
+                  {onToggleViewerMode && (
+                    <button
+                      onClick={() => {
+                        onToggleViewerMode(!isViewerMode);
+                        onClose();
+                      }}
+                      className="bg-white border border-rose-300 hover:bg-rose-100/50 text-rose-800 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>{isViewerMode ? 'Salir de Modo Espectador' : 'Simular qué ve ella'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Protección del Vault en la vista de mamá */}
+              <div className="bg-slate-900 text-slate-200 rounded-2xl p-4 text-xs space-y-2 shadow-xs">
+                <div className="flex items-center gap-2 text-amber-400 font-bold">
+                  <Lock className="w-4 h-4" />
+                  <span>Tu Bóveda Privada (Vault) está 100% protegida</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed text-[11px]">
+                  Cualquier alimento o capricho que tengas marcado como <strong>"🔒 Bóveda Privada"</strong> será invisible. Tu madre o quien abra el enlace solo verá la comida que hayas decidido no ocultar.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 2. MODO PISO COMPARTIDO (COLABORATIVO) */}
+          {activeTab === 'roommates' && (
             <div className="space-y-4">
               {/* Nombre del Frigo */}
               <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
@@ -219,10 +283,10 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
                 )}
               </div>
 
-              {/* Código de Invitación para compartir */}
+              {/* Código de Invitación para colaborar */}
               <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 text-center space-y-2">
                 <span className="text-xs text-emerald-800 font-semibold block">
-                  Código de invitación para tus compañeros de piso / pareja:
+                  Código para compañeros de piso / pareja (Edición conjunta):
                 </span>
                 <div className="flex items-center justify-center gap-2">
                   <span className="font-mono text-xl sm:text-2xl font-black tracking-widest text-emerald-950 bg-white px-4 py-2 rounded-xl border border-emerald-300 shadow-2xs select-all">
@@ -233,11 +297,11 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
                     className="bg-emerald-600 hover:bg-emerald-700 text-white p-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5 active:scale-95"
                     title="Copiar código"
                   >
-                    {copied ? <Check className="w-5 h-5 text-white" /> : <Copy className="w-5 h-5" />}
+                    {copiedCode ? <Check className="w-5 h-5 text-white" /> : <Copy className="w-5 h-5" />}
                   </button>
                 </div>
                 <p className="text-[11px] text-emerald-700">
-                  {copied ? '¡Copiado en el portapapeles!' : 'Dile a tu compañero que pulse en "Unirme a otro Frigo" y pegue este código.'}
+                  {copiedCode ? '¡Copiado en el portapapeles!' : 'Quien introduzca este código podrá añadir y editar comida del frigo común.'}
                 </p>
               </div>
 
@@ -276,19 +340,6 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
                 </div>
               </div>
 
-              {/* Explicación de la Bóveda Privada (Vault) */}
-              <div className="bg-slate-900 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs space-y-2 shadow-xs">
-                <div className="flex items-center gap-2 text-amber-400 font-bold">
-                  <Lock className="w-4 h-4" />
-                  <span>¿Tienes comida que no quieres compartir? (Vault)</span>
-                </div>
-                <p className="text-slate-300 leading-relaxed text-[11px]">
-                  Al añadir o editar cualquier producto, marca la opción <strong>"🔒 Guardar en mi Bóveda Privada"</strong>.
-                  Esos alimentos solo los verás tú en tu móvil. Tus compañeros no sabrán que existen ni podrán verlos en el frigo compartido.
-                </p>
-              </div>
-
-              {/* Botón salir del frigo si hay más de 1 miembro */}
               {household.members.length > 1 && (
                 <div className="pt-2 text-center">
                   <button
@@ -305,7 +356,10 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {/* 3. UNIRME A OTRO FRIGO */}
+          {activeTab === 'join' && (
             <div className="space-y-4">
               <div className="text-center py-2 space-y-1">
                 <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-2">
@@ -358,4 +412,3 @@ export const ShareFridgeModal: React.FC<ShareFridgeModalProps> = ({
     </div>
   );
 };
-
