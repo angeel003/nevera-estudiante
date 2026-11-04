@@ -7,6 +7,8 @@ export const STORAGE_KEY_TICKET_DRAFT = 'estudiante_app_ticket_session';
 export const STORAGE_KEY_ADMIN_PROPOSALS = 'myfridge_admin_proposals';
 export const STORAGE_KEY_USER_ID = 'myfridge_current_user_id';
 export const STORAGE_KEY_USER_EMAIL = 'myfridge_current_user_email';
+export const STORAGE_KEY_AUTH_USER = 'myfridge_auth_user_data';
+export const STORAGE_KEY_REMEMBER_ME = 'myfridge_remember_session';
 export const STORAGE_KEY_HOUSEHOLD = 'myfridge_current_household';
 
 // Lista de correos con permisos de Administrador para moderar alimentos

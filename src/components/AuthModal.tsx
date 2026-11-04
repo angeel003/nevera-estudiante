@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { User, Lock, Mail, ArrowRight, X, AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { User, Lock, Mail, ArrowRight, X, AlertCircle, CheckCircle2, KeyRound, Refrigerator, LogOut } from 'lucide-react';
 import type { UserAccount } from '../types';
 
 interface AuthModalProps {
   currentUser?: UserAccount | null;
-  onLoginSuccess: (user: UserAccount) => void;
+  onLoginSuccess: (user: UserAccount, rememberMe: boolean) => void;
   onLogout: () => void;
-  onClose: () => void;
+  onClose?: () => void;
+  isInitialScreen?: boolean;
 }
 
 type AuthView = 'login' | 'register' | 'forgot' | 'reset-confirm' | 'profile';
@@ -16,6 +17,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLoginSuccess,
   onLogout,
   onClose,
+  isInitialScreen = false,
 }) => {
   const [view, setView] = useState<AuthView>(currentUser ? 'profile' : 'login');
   const [email, setEmail] = useState('');
@@ -23,6 +25,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [name, setName] = useState(currentUser?.name || '');
   const [resetCode, setResetCode] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,7 +107,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      onLoginSuccess(data.user);
+      onLoginSuccess(data.user, true);
       setSuccessMsg('Perfil actualizado correctamente.');
       setPassword('');
       setNewPassword('');
@@ -112,7 +115,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess({
         ...currentUser,
         name: name || currentUser.name,
-      });
+      }, true);
       setSuccessMsg('Perfil actualizado localmente.');
       setPassword('');
       setNewPassword('');
@@ -142,8 +145,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al autenticar');
 
-      onLoginSuccess(data.user);
-      onClose();
+      onLoginSuccess(data.user, rememberMe);
+      if (onClose) onClose();
     } catch (err: any) {
       const cleanEmail = email.toLowerCase().trim();
       const isAdminUser = cleanEmail === 'angelhv2003@gmail.com' || cleanEmail === 'admin@myfridge.pages.dev';
@@ -155,22 +158,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         isAdmin: isAdminUser,
       };
 
-      onLoginSuccess(fallbackUser);
-      onClose();
+      onLoginSuccess(fallbackUser, rememberMe);
+      if (onClose) onClose();
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-slate-200 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto ${
+        isInitialScreen
+          ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 min-h-screen'
+          : 'bg-black/60 backdrop-blur-xs'
+      } animate-fade-in`}
+    >
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-slate-200 relative my-auto">
+        {!isInitialScreen && onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
 
         {/* ============================================================== */}
         {/* VISTA 1: MODIFICAR PERFIL Y CAMBIAR CONTRASEÑA                 */}
@@ -248,9 +259,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <button
               onClick={onLogout}
-              className="w-full bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 text-xs font-bold py-2 rounded-xl transition"
+              className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 active:scale-95"
             >
-              Cerrar sesión
+              <LogOut className="w-4 h-4" />
+              <span>Cerrar sesión y salir</span>
             </button>
           </div>
         )}
@@ -390,14 +402,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {(view === 'login' || view === 'register') && (
           <div className="space-y-4">
             <div className="text-center">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
-                <User className="w-6 h-6" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-600/30">
+                <Refrigerator className="w-7 h-7" />
               </div>
-              <h3 className="font-bold text-slate-800 text-lg">
-                {view === 'register' ? 'Crear cuenta' : 'Iniciar sesión'}
+              <h3 className="font-extrabold text-slate-900 text-xl tracking-tight">
+                {view === 'register' ? 'Crear cuenta' : 'Nevera Estudiante'}
               </h3>
-              <p className="text-xs text-slate-500">
-                Guarda tu nevera y lista de compras en la nube protegida
+              <p className="text-xs text-slate-500 mt-1">
+                {view === 'register'
+                  ? 'Guarda tu despensa, recetas y compras en la nube'
+                  : 'Inicia sesión para acceder a tu despensa y recetas'}
               </p>
             </div>
 
@@ -478,6 +492,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Checkbox: Mantener sesión iniciada */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none py-1 group">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 accent-emerald-600 cursor-pointer"
+                />
+                <span className="text-xs text-slate-600 group-hover:text-slate-900 font-medium">
+                  Mantener la sesión iniciada
+                </span>
+              </label>
 
               <button
                 type="submit"

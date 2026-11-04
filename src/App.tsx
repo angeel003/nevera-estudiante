@@ -20,6 +20,8 @@ import {
   STORAGE_KEY_ADMIN_PROPOSALS,
   STORAGE_KEY_USER_ID,
   STORAGE_KEY_USER_EMAIL,
+  STORAGE_KEY_AUTH_USER,
+  STORAGE_KEY_REMEMBER_ME,
   STORAGE_KEY_HOUSEHOLD,
   ADMIN_EMAILS,
   getDaysRemaining
@@ -72,15 +74,49 @@ export default function App() {
 
   // User account & session state
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    const savedEmail = localStorage.getItem(STORAGE_KEY_USER_EMAIL) || 'angelhv2003@gmail.com';
-    const savedId = localStorage.getItem(STORAGE_KEY_USER_ID) || 'usr_angel_admin';
-    const isAdminUser = ADMIN_EMAILS.includes(savedEmail.toLowerCase().trim());
-    return {
-      id: savedId,
-      email: savedEmail,
-      name: savedEmail.split('@')[0],
-      isAdmin: isAdminUser,
-    };
+    // 1. Si marcó "Mantener sesión iniciada", leer credenciales recordadas de localStorage
+    const isRemembered = localStorage.getItem(STORAGE_KEY_REMEMBER_ME) === 'true';
+    if (isRemembered) {
+      const savedUserStr = localStorage.getItem(STORAGE_KEY_AUTH_USER);
+      if (savedUserStr) {
+        try {
+          const user = JSON.parse(savedUserStr);
+          if (user && user.id) return user;
+        } catch (e) {}
+      }
+      const savedEmail = localStorage.getItem(STORAGE_KEY_USER_EMAIL);
+      const savedId = localStorage.getItem(STORAGE_KEY_USER_ID);
+      if (savedEmail && savedId) {
+        return {
+          id: savedId,
+          email: savedEmail,
+          name: savedEmail.split('@')[0],
+          isAdmin: ADMIN_EMAILS.includes(savedEmail.toLowerCase().trim()),
+        };
+      }
+    }
+
+    // 2. Si es una pestaña activa sin recordar permanentemente, leer de sessionStorage
+    const sessionUserStr = sessionStorage.getItem(STORAGE_KEY_AUTH_USER);
+    if (sessionUserStr) {
+      try {
+        const user = JSON.parse(sessionUserStr);
+        if (user && user.id) return user;
+      } catch (e) {}
+    }
+    const sessionEmail = sessionStorage.getItem(STORAGE_KEY_USER_EMAIL);
+    const sessionUserId = sessionStorage.getItem(STORAGE_KEY_USER_ID);
+    if (sessionEmail && sessionUserId) {
+      return {
+        id: sessionUserId,
+        email: sessionEmail,
+        name: sessionEmail.split('@')[0],
+        isAdmin: ADMIN_EMAILS.includes(sessionEmail.toLowerCase().trim()),
+      };
+    }
+
+    // 3. No hay sesión iniciada: se solicita login obligatorio al entrar
+    return null;
   });
 
   const userId = currentUser?.id || 'usr_guest';
@@ -980,6 +1016,51 @@ TOTAL 15.55 €`;
   const pendingTicketCount = ticketSession?.items.filter(i => i.status === 'pending').length;
   const pendingProposalsCount = adminProposals.filter(p => p.status === 'pending').length;
 
+  // Manejo de autenticación y persistencia de sesión
+  const handleLoginSuccess = (user: UserAccount, rememberMe: boolean) => {
+    setCurrentUser(user);
+    if (rememberMe) {
+      localStorage.setItem(STORAGE_KEY_REMEMBER_ME, 'true');
+      localStorage.setItem(STORAGE_KEY_AUTH_USER, JSON.stringify(user));
+      localStorage.setItem(STORAGE_KEY_USER_ID, user.id);
+      localStorage.setItem(STORAGE_KEY_USER_EMAIL, user.email);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_REMEMBER_ME);
+      localStorage.removeItem(STORAGE_KEY_AUTH_USER);
+      localStorage.removeItem(STORAGE_KEY_USER_ID);
+      localStorage.removeItem(STORAGE_KEY_USER_EMAIL);
+      sessionStorage.setItem(STORAGE_KEY_AUTH_USER, JSON.stringify(user));
+      sessionStorage.setItem(STORAGE_KEY_USER_ID, user.id);
+      sessionStorage.setItem(STORAGE_KEY_USER_EMAIL, user.email);
+    }
+    setShowAuthModal(false);
+    confetti({ particleCount: 50, spread: 60 });
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(STORAGE_KEY_REMEMBER_ME);
+    localStorage.removeItem(STORAGE_KEY_AUTH_USER);
+    localStorage.removeItem(STORAGE_KEY_USER_EMAIL);
+    localStorage.removeItem(STORAGE_KEY_USER_ID);
+    sessionStorage.removeItem(STORAGE_KEY_AUTH_USER);
+    sessionStorage.removeItem(STORAGE_KEY_USER_EMAIL);
+    sessionStorage.removeItem(STORAGE_KEY_USER_ID);
+    setShowAuthModal(false);
+  };
+
+  // Pantalla de inicio de sesión obligatoria al entrar si no hay sesión
+  if (!currentUser) {
+    return (
+      <AuthModal
+        isInitialScreen={true}
+        currentUser={null}
+        onLoginSuccess={handleLoginSuccess}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   return (
     <div className="w-full max-w-5xl mx-auto min-h-screen bg-slate-50/70 flex flex-col shadow-2xl">
       {/* Top Header */}
@@ -1129,21 +1210,12 @@ TOTAL 15.55 €`;
         />
       )}
 
-      {/* Auth Modal (Login / Registro con contraseña) */}
+      {/* Auth Modal (Modificar perfil o cerrar sesión desde dentro) */}
       {showAuthModal && (
         <AuthModal
           currentUser={currentUser}
-          onLoginSuccess={(user) => {
-            setCurrentUser(user);
-            localStorage.setItem(STORAGE_KEY_USER_ID, user.id);
-            localStorage.setItem(STORAGE_KEY_USER_EMAIL, user.email);
-            confetti({ particleCount: 50, spread: 60 });
-          }}
-          onLogout={() => {
-            setCurrentUser(null);
-            localStorage.removeItem(STORAGE_KEY_USER_EMAIL);
-            localStorage.removeItem(STORAGE_KEY_USER_ID);
-          }}
+          onLoginSuccess={handleLoginSuccess}
+          onLogout={handleLogout}
           onClose={() => setShowAuthModal(false)}
         />
       )}
