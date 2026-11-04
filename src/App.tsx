@@ -31,6 +31,7 @@ import { parseReceiptText } from './receiptParser';
 import { extractTextFromPdf } from './pdfParser';
 import { detectSupermarketFromText, SUPERMARKET_CATALOGS } from './supermarkets';
 import { detectDuplicateSuspicion } from './services/shoppingOptimizer';
+import { recognizeReceiptText } from './services/ocrService';
 
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -309,6 +310,7 @@ export default function App() {
 
   const [selectedSupermarket, setSelectedSupermarket] = useState<string>('mercadona');
   const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [ocrStatusMessage, setOcrStatusMessage] = useState<string | null>(null);
 
   // Supermarket autodetection prompt state
   const [pendingTicketData, setPendingTicketData] = useState<{
@@ -747,16 +749,19 @@ TOTAL 15.55 €`;
           if (!firstPreview) {
             firstPreview = previewUrl;
           }
-          // Si el usuario sube varias fotos/capturas, generamos las partes correspondientes
-          const mockChunk = i === 0 ? `MERCADONA S.A.
-1 HUEVOS CAMPEROS L 12U 2.45
-2 LECHE ENTERA 1L 1.95
-1 PLATANO DE CANARIAS 1.80
-1 PECHUGA POLLO FILETES 4.50` : `1 TOMATE FRITO BRICK 0.85
-1 PASTA MACARRONES 500G 0.90
-1 PAPEL HIGIENICO 12R 3.10
-TOTAL 15.55 €`;
-          combinedText += (combinedText ? '\n' : '') + mockChunk;
+
+          // Procesar con motor OCR real Tesseract.js
+          try {
+            setOcrStatusMessage(`Preparando foto ${i + 1} de ${files.length}...`);
+            const ocrExtracted = await recognizeReceiptText(file, (p) => {
+              setOcrStatusMessage(`[Foto ${i + 1}/${files.length}] ${p.status}`);
+            });
+            if (ocrExtracted && ocrExtracted.trim().length > 5) {
+              combinedText += (combinedText ? '\n' : '') + ocrExtracted;
+            }
+          } catch (ocrErr) {
+            console.error('Error al ejecutar OCR en archivo:', file.name, ocrErr);
+          }
         }
       }
 
@@ -772,6 +777,7 @@ TOTAL 15.55 €`;
       alert('Hubo un problema al leer los archivos. Inténtalo de nuevo.');
     } finally {
       setIsProcessingFile(false);
+      setOcrStatusMessage(null);
     }
   };
 
@@ -1119,6 +1125,7 @@ TOTAL 15.55 €`;
             selectedSupermarket={selectedSupermarket}
             onSelectSupermarket={setSelectedSupermarket}
             isProcessingFile={isProcessingFile}
+            ocrStatusMessage={ocrStatusMessage}
             onFileInputChange={handleFileInputChange}
             onLoadDemoTicket={handleLoadDemoTicket}
             onToggleVerified={toggleItemVerified}

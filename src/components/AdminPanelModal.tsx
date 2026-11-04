@@ -40,8 +40,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setDbMessage(null);
     try {
       const res = await fetch('/api/init-db?key=admin');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al conectar con Cloudflare D1');
+      let data: any = null;
+      try {
+        const text = await res.text();
+        if (text && !text.trim().startsWith('<')) {
+          data = JSON.parse(text);
+        }
+      } catch {}
+
+      if (!res.ok || !data) throw new Error(data?.error || 'Error al conectar con Cloudflare D1 (modo local)');
       setDbStatus('success');
       setDbMessage(data.message || 'Tablas creadas e inicializadas en D1 con éxito');
     } catch (err: any) {

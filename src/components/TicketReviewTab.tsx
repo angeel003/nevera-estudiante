@@ -8,7 +8,8 @@ import {
   Sparkles,
   ShoppingBag,
   PauseCircle,
-  Share2
+  Share2,
+  ScanLine
 } from 'lucide-react';
 import type { TicketSession, TicketReviewItem, Category } from '../types';
 
@@ -17,6 +18,7 @@ interface TicketReviewTabProps {
   selectedSupermarket: string;
   onSelectSupermarket: (sm: string) => void;
   isProcessingFile: boolean;
+  ocrStatusMessage?: string | null;
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onLoadDemoTicket: () => void;
   onToggleVerified: (id: string) => void;
@@ -32,6 +34,7 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
   selectedSupermarket,
   onSelectSupermarket,
   isProcessingFile,
+  ocrStatusMessage,
   onFileInputChange,
   onLoadDemoTicket,
   onToggleVerified,
@@ -92,11 +95,19 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
           </div>
         </div>
 
+        {/* Banner de progreso OCR en vivo */}
+        {ocrStatusMessage && (
+          <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 flex items-center gap-2.5 text-xs text-emerald-800 animate-pulse">
+            <ScanLine className="w-4 h-4 text-emerald-600 animate-spin shrink-0" />
+            <span className="font-semibold">{ocrStatusMessage}</span>
+          </div>
+        )}
+
         {/* Upload actions responsive */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
           <label className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl cursor-pointer active:scale-95 transition shadow-xs text-center">
             <Upload className="w-4 h-4 shrink-0" />
-            <span>{isProcessingFile ? 'Leyendo tickets...' : 'Subir fotos o PDF (admite varias)'}</span>
+            <span>{isProcessingFile ? (ocrStatusMessage || 'Leyendo tickets...') : 'Subir fotos o PDF (admite varias)'}</span>
             <input
               type="file"
               multiple

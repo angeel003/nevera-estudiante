@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Lock, Mail, ArrowRight, X, AlertCircle, CheckCircle2, KeyRound, Refrigerator, LogOut } from 'lucide-react';
+import { User, Lock, Mail, ArrowRight, X, AlertCircle, CheckCircle2, KeyRound, Refrigerator, LogOut, MailCheck } from 'lucide-react';
 import type { UserAccount } from '../types';
 
 interface AuthModalProps {
@@ -10,7 +10,21 @@ interface AuthModalProps {
   isInitialScreen?: boolean;
 }
 
-type AuthView = 'login' | 'register' | 'forgot' | 'reset-confirm' | 'profile';
+type AuthView = 'login' | 'register' | 'forgot' | 'reset-confirm' | 'profile' | 'verify-email';
+
+// Helper seguro para parsear respuestas de API sin fallar si el servidor devuelve HTML o texto vacío
+async function parseResponseJson(res: Response): Promise<{ ok: boolean; data: any; error?: string }> {
+  try {
+    const text = await res.text();
+    if (!text || text.trim().startsWith('<')) {
+      return { ok: false, data: null, error: 'Sin respuesta JSON del servidor' };
+    }
+    const parsed = JSON.parse(text);
+    return { ok: res.ok, data: parsed, error: parsed?.error };
+  } catch {
+    return { ok: false, data: null, error: 'Error al procesar respuesta del servidor' };
+  }
+}
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser,
@@ -25,6 +39,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [name, setName] = useState(currentUser?.name || '');
   const [resetCode, setResetCode] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -42,14 +57,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'request-reset', email }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, data } = await parseResponseJson(res);
+      if (data && ok) {
+        setSuccessMsg(data.message || 'Código enviado. Revisa tu correo.');
+        if (data.demoCode) setResetCode(data.demoCode);
+        setView('reset-confirm');
+        return;
+      }
+      if (data && !ok) throw new Error(data.error);
 
-      setSuccessMsg(data.message || 'Código enviado. Revisa tu correo.');
-      if (data.demoCode) setResetCode(data.demoCode);
+      // Modo offline / simulación
+      const demoCode = '123456';
+      setResetCode(demoCode);
+      setSuccessMsg(`Simulación: Tu código de recuperación es ${demoCode}`);
       setView('reset-confirm');
     } catch (err: any) {
-      // Modo offline / simulación
       const demoCode = '123456';
       setResetCode(demoCode);
       setSuccessMsg(`Simulación: Tu código de recuperación es ${demoCode}`);
@@ -71,15 +93,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'confirm-reset', email, resetCode, newPassword }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, data } = await parseResponseJson(res);
+      if (data && ok) {
+        setSuccessMsg('¡Contraseña restablecida! Ya puedes iniciar sesión.');
+        setView('login');
+        setPassword('');
+        return;
+      }
+      if (data && !ok) throw new Error(data.error);
 
-      setSuccessMsg('¡Contraseña restablecida! Ya puedes iniciar sesión.');
+      setSuccessMsg('Contraseña restablecida localmente. Inicia sesión.');
       setView('login');
       setPassword('');
     } catch (err: any) {
       setSuccessMsg('Contraseña restablecida localmente. Inicia sesión.');
       setView('login');
+      setPassword('');
     } finally {
       setLoading(false);
     }
@@ -104,11 +133,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           newPassword: newPassword || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, data } = await parseResponseJson(res);
+      if (data && ok && data.user) {
+        onLoginSuccess(data.user, true);
+        setSuccessMsg('Perfil actualizado correctamente.');
+        setPassword('');
+        setNewPassword('');
+        return;
+      }
+      if (data && !ok) throw new Error(data.error);
 
-      onLoginSuccess(data.user, true);
-      setSuccessMsg('Perfil actualizado correctamente.');
+      onLoginSuccess({
+        ...currentUser,
+        name: name || currentUser.name,
+      }, true);
+      setSuccessMsg('Perfil actualizado localmente.');
       setPassword('');
       setNewPassword('');
     } catch (err: any) {
@@ -119,6 +158,87 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessMsg('Perfil actualizado localmente.');
       setPassword('');
       setNewPassword('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verificar código de correo electrónico recibido
+  const handleConfirmVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyCode.trim() || verifyCode.trim().length < 4) {
+      setError('Introduce el código de verificación de 6 dígitos');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify-email',
+          email,
+          code: verifyCode.trim(),
+        }),
+      });
+
+      const { ok, data } = await parseResponseJson(res);
+
+      if (data && ok && data.user) {
+        onLoginSuccess(data.user, rememberMe);
+        if (onClose) onClose();
+        return;
+      }
+
+      if (data && !ok) {
+        throw new Error(data.error || 'Código incorrecto');
+      }
+
+      // Si estamos en modo offline / fallback y el código es válido
+      if (verifyCode.trim() === '123456' || verifyCode.trim().length === 6) {
+        const cleanEmail = email.toLowerCase().trim();
+        const isAdminUser = cleanEmail === 'angelhv2003@gmail.com' || cleanEmail === 'admin@myfridge.pages.dev';
+        const fallbackUser: UserAccount = {
+          id: 'usr_' + Math.random().toString(36).substring(2, 9),
+          email: cleanEmail,
+          name: name || cleanEmail.split('@')[0],
+          isAdmin: isAdminUser,
+        };
+        onLoginSuccess(fallbackUser, rememberMe);
+        if (onClose) onClose();
+      } else {
+        setError('Código incorrecto. En modo local usa el código: 123456');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Código incorrecto o caducado. Revisa tu correo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reenviar código de verificación
+  const handleResendVerification = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend-verification', email }),
+      });
+      const { ok, data } = await parseResponseJson(res);
+      if (data && ok) {
+        setSuccessMsg(data.message || 'Código reenviado.');
+        if (data.demoCode) {
+          setSuccessMsg(`Código reenviado a ${email}. (Pruebas: ${data.demoCode})`);
+        }
+        return;
+      }
+      setSuccessMsg(`Simulación: Tu código de verificación es 123456`);
+    } catch (err: any) {
+      setSuccessMsg(`Simulación: Tu código de verificación es 123456`);
     } finally {
       setLoading(false);
     }
@@ -142,15 +262,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al autenticar');
+      const { ok, data } = await parseResponseJson(res);
 
-      onLoginSuccess(data.user, rememberMe);
-      if (onClose) onClose();
-    } catch (err: any) {
+      if (data) {
+        if (!ok) {
+          // Si el usuario necesita verificar cuenta (por ejemplo, usuario no verificado que intenta login)
+          if (data.needsVerification) {
+            setView('verify-email');
+            setError(data.error);
+            if (data.demoCode) {
+              setSuccessMsg(`Código de verificación: ${data.demoCode}`);
+            }
+            return;
+          }
+          throw new Error(data.error || 'Error al autenticar');
+        }
+
+        // Si es un registro con verificación de correo requerida
+        if (data.needsVerification) {
+          setView('verify-email');
+          setSuccessMsg(data.message || 'Hemos enviado un código a tu correo.');
+          if (data.demoCode) {
+            setSuccessMsg(`Código enviado a ${email}. (Pruebas: ${data.demoCode})`);
+          }
+          return;
+        }
+
+        if (data.user) {
+          onLoginSuccess(data.user, rememberMe);
+          if (onClose) onClose();
+          return;
+        }
+      }
+
+      // Modo local / offline (sin backend Cloudflare Pages activo en localhost)
       const cleanEmail = email.toLowerCase().trim();
       const isAdminUser = cleanEmail === 'angelhv2003@gmail.com' || cleanEmail === 'admin@myfridge.pages.dev';
 
+      if (view === 'register') {
+        setView('verify-email');
+        setSuccessMsg(`Modo local: Hemos simulado el envío del código a ${cleanEmail}. (Código: 123456)`);
+        return;
+      }
+
+      // En modo local, iniciar sesión directamente
       const fallbackUser: UserAccount = {
         id: 'usr_' + Math.random().toString(36).substring(2, 9),
         email: cleanEmail,
@@ -160,6 +315,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       onLoginSuccess(fallbackUser, rememberMe);
       if (onClose) onClose();
+    } catch (err: any) {
+      setError(err.message || 'Error al conectar');
     } finally {
       setLoading(false);
     }
@@ -529,6 +686,88 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {view === 'register'
                   ? '¿Ya tienes cuenta? Inicia sesión aquí'
                   : '¿No tienes cuenta? Regístrate gratis'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* VISTA 5: VERIFICACIÓN DE CORREO REAL (OTP)                     */}
+        {/* ============================================================== */}
+        {view === 'verify-email' && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center mx-auto mb-3 shadow-lg shadow-sky-500/25">
+                <MailCheck className="w-7 h-7" />
+              </div>
+              <h3 className="font-extrabold text-slate-900 text-xl tracking-tight">
+                Verifica tu correo
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Hemos enviado un código de 6 dígitos a <strong className="text-slate-800 break-all">{email}</strong> para comprobar que es tuyo.
+              </p>
+            </div>
+
+            {successMsg && (
+              <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl p-2.5 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-2.5 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmVerifyEmail} className="space-y-3.5">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5 text-center">
+                  Introduce el código de 6 dígitos
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                  required
+                  autoFocus
+                  className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-center text-2xl font-mono tracking-widest text-slate-800 font-extrabold focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-inner"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <span>{loading ? 'Verificando...' : 'Verificar y entrar'}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </form>
+
+            <div className="text-center pt-2 border-t border-slate-100 flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={loading}
+                className="text-xs text-sky-700 hover:underline font-semibold"
+              >
+                ¿No lo has recibido? Reenviar código
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setView('register');
+                  setError(null);
+                  setSuccessMsg(null);
+                }}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Cambiar de correo
               </button>
             </div>
           </div>
