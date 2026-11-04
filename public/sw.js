@@ -50,3 +50,4 @@ self.addEventListener('fetch', (event: any) => {
   // Normal request pass-through
   event.respondWith(fetch(event.request));
 });
+

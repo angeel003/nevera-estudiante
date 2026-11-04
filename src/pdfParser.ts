@@ -21,3 +21,4 @@ export async function extractTextFromPdf(file: File): Promise<string> {
 
   return fullText;
 }
+

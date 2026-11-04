@@ -56,7 +56,7 @@ export interface Recipe {
   steps: string[];
 }
 
-export type Supermarket = 'mercadona' | 'carrefour' | 'lidl' | 'dia' | 'alcampo' | 'eroski' | 'otro';
+export type Supermarket = 'mercadona' | 'carrefour' | 'lidl' | 'dia' | 'alcampo' | 'eroski' | 'otro' | string;
 
 export interface TicketReviewItem {
   id: string;
@@ -77,4 +77,54 @@ export interface TicketSession {
   createdAt: string;
   imagePreview?: string | null;
   items: TicketReviewItem[];
+}
+
+export interface ProposedFoodItem {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  name: string;
+  supermarket: string;
+  category: Category;
+  unit: string;
+  price?: number;
+  rawText?: string;
+  createdAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  duplicateSuspect?: {
+    existingId: string;
+    existingName: string;
+    similarity: number;
+    reason: string;
+  };
+}
+
+export interface SupermarketProductOffer {
+  supermarketId: string;
+  supermarketName: string;
+  productName: string;
+  price: number;
+  unit: string;
+  availableAmount?: number;
+}
+
+export interface OptimizedBasketPlan {
+  id: string;
+  title: string;
+  description: string;
+  totalCost: number;
+  totalStores: number;
+  stores: {
+    supermarketId: string;
+    supermarketName: string;
+    items: {
+      recipeIngredient: string;
+      productName: string;
+      neededQuantity: number;
+      unit: string;
+      unitPrice: number;
+      subtotal: number;
+    }[];
+    storeTotal: number;
+  }[];
 }

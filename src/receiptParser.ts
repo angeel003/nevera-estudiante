@@ -1,5 +1,6 @@
 import type { PantryItem } from './types';
 import { guessCategory, guessUnit, getDefaultExpiryDate } from './mockData';
+import { matchProductInCatalog } from './supermarkets';
 
 export interface ParsedTicketItem {
   rawText: string;
@@ -7,17 +8,13 @@ export interface ParsedTicketItem {
   quantity: number;
   unit: string;
   price?: number;
+  category?: any;
 }
 
-export function parseReceiptText(text: string): ParsedTicketItem[] {
+export function parseReceiptText(text: string, supermarketId?: string): ParsedTicketItem[] {
   const lines = text.split('\n');
   const items: ParsedTicketItem[] = [];
 
-  // Supermarket patterns:
-  // e.g., "1 HUEVOS CAMPEROS 12U 2.45"
-  // "2 LECHE ENTERA 1L 1.90"
-  // "PLATANO DE CANARIAS 1.85"
-  // "PECHUGA POLLO 4.20"
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.length < 3) continue;
@@ -32,6 +29,8 @@ export function parseReceiptText(text: string): ParsedTicketItem[] {
       lower.includes('mercadona') ||
       lower.includes('carrefour') ||
       lower.includes('lidl') ||
+      lower.includes('alcampo') ||
+      lower.includes('eroski') ||
       lower.includes('cif') ||
       lower.includes('factura') ||
       lower.includes('fecha') ||
@@ -57,19 +56,35 @@ export function parseReceiptText(text: string): ParsedTicketItem[] {
       name = qtyMatch[2];
     }
 
-    // Capitalize first letter of each word nicely
-    name = name
-      .toLowerCase()
-      .replace(/(?:^|\s)\S/g, (char) => char.toUpperCase())
-      .replace(/\s+/g, ' ')
-      .trim();
+    // Comprobar primero si este supermercado tiene este alimento identificado en su catálogo
+    const matchedKnownProduct = matchProductInCatalog(name, supermarketId);
 
-    if (name.length > 2) {
+    let finalName: string;
+    let finalCategory: any;
+    let finalUnit: string;
+
+    if (matchedKnownProduct) {
+      finalName = matchedKnownProduct.normalizedName;
+      finalCategory = matchedKnownProduct.category;
+      finalUnit = matchedKnownProduct.unit;
+    } else {
+      // Capitalize first letter of each word nicely
+      finalName = name
+        .toLowerCase()
+        .replace(/(?:^|\s)\S/g, (char) => char.toUpperCase())
+        .replace(/\s+/g, ' ')
+        .trim();
+      finalCategory = guessCategory(finalName);
+      finalUnit = guessUnit(finalName);
+    }
+
+    if (finalName.length > 2) {
       items.push({
         rawText: trimmed,
-        name,
+        name: finalName,
+        category: finalCategory,
         quantity: qty,
-        unit: guessUnit(name),
+        unit: finalUnit,
         price,
       });
     }
@@ -83,7 +98,7 @@ export function convertToPantryItem(item: ParsedTicketItem): PantryItem {
   return {
     id: 'item_' + Math.random().toString(36).substring(2, 9),
     name: item.name,
-    category: guessCategory(item.name),
+    category: item.category || guessCategory(item.name),
     quantity: item.quantity,
     unit: item.unit,
     price: item.price,
