@@ -1,20 +1,21 @@
 -- Esquema optimizado para Cloudflare D1 (SQLite en Edge)
--- Incluye autenticación con contraseñas seguras (PBKDF2/SHA-256) y catálogo orgánico
+-- Incluye autenticación con contraseñas seguras, códigos de recuperación por email y catálogo orgánico
 
--- 1. Tabla de Usuarios y Credenciales
+-- 1. Tabla de Usuarios, Credenciales y Recuperación
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     salt TEXT NOT NULL,
     name TEXT,
+    reset_code TEXT,
+    reset_expires INTEGER,
     is_admin INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
     last_login INTEGER DEFAULT 0
 );
 
 -- 2. Catálogo global compartido de Alimentos por Supermercado
--- Se llena orgánicamente con las aprobaciones del Administrador y los tickets verificados
 CREATE TABLE IF NOT EXISTS supermarket_catalog (
     id TEXT PRIMARY KEY,
     supermarket_id TEXT NOT NULL, -- 'mercadona', 'dia', 'carrefour', 'lidl', etc.
@@ -30,7 +31,7 @@ CREATE TABLE IF NOT EXISTS supermarket_catalog (
 
 CREATE INDEX IF NOT EXISTS idx_catalog_supermarket ON supermarket_catalog(supermarket_id);
 
--- 3. Propuestas de alimentos pendientes de moderación
+-- 3. Propuestas de alimentos de usuarios para moderar
 CREATE TABLE IF NOT EXISTS food_proposals (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS food_proposals (
     price REAL,
     price_per_kg REAL,
     raw_text TEXT,
-    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    status TEXT DEFAULT 'pending',
     duplicate_suspect_json TEXT,
     created_at INTEGER NOT NULL
 );
@@ -102,7 +103,7 @@ CREATE TABLE IF NOT EXISTS user_recipes (
     prep_time_minutes INTEGER DEFAULT 0,
     difficulty TEXT NOT NULL,
     ingredients_json TEXT NOT NULL,
-    steps_json TEXT NOT NULL, -- Array de pasos con instrucciones detalladas
+    steps_json TEXT NOT NULL,
     updated_at INTEGER NOT NULL,
     is_deleted INTEGER DEFAULT 0
 );
