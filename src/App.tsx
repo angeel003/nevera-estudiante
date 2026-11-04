@@ -943,7 +943,7 @@ TOTAL 15.55 €`;
       />
 
       {/* Main Content View */}
-      <main className="flex-1 p-4 pb-24 overflow-y-auto">
+      <main className="flex-1 p-3 sm:p-4 pb-28 sm:pb-32 overflow-y-auto">
         {activeTab === 'frigo' && (
           <PantryTab
             pantry={pantry}
