@@ -96,9 +96,10 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
           <label className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl cursor-pointer active:scale-95 transition shadow-xs text-center">
             <Upload className="w-4 h-4 shrink-0" />
-            <span>{isProcessingFile ? 'Leyendo ticket...' : 'Subir foto o PDF'}</span>
+            <span>{isProcessingFile ? 'Leyendo tickets...' : 'Subir fotos o PDF (admite varias)'}</span>
             <input
               type="file"
+              multiple
               accept="image/*,application/pdf"
               className="hidden"
               onChange={onFileInputChange}
@@ -161,7 +162,19 @@ export const TicketReviewTab: React.FC<TicketReviewTabProps> = ({
               <p className="text-[11px] text-slate-400">Total aprox: {totalCalculatedPrice.toFixed(2)}€</p>
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer active:scale-95">
+                <Upload className="w-3.5 h-3.5 text-slate-500" />
+                <span>+ Añadir otra foto / parte</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={onFileInputChange}
+                  disabled={isProcessingFile}
+                />
+              </label>
               <button
                 onClick={onOpenAddModal}
                 className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1.5 rounded-xl transition flex items-center gap-1"

@@ -640,6 +640,41 @@ export default function App() {
     });
   };
 
+  const appendTicketSessionItems = (rawText: string, supermarketId?: string) => {
+    if (!ticketSession) return;
+    const sm = supermarketId || ticketSession.supermarket;
+    const parsed = parseReceiptText(rawText, sm);
+    
+    // Nombres existentes para evitar duplicar productos en caso de capturas solapadas
+    const existingNames = new Set(ticketSession.items.map(i => i.name.toLowerCase()));
+    
+    const newReviewItems: TicketReviewItem[] = parsed
+      .filter(item => !existingNames.has(item.name.toLowerCase()))
+      .map((item, index) => ({
+        id: 'rev_' + Date.now() + '_' + index,
+        rawText: item.rawText || item.name,
+        name: item.name,
+        category: item.category || guessCategory(item.name),
+        quantity: item.quantity,
+        unit: item.unit,
+        price: item.price,
+        expiryDate: getDefaultExpiryDate(item.name),
+        isFrozen: false,
+        status: 'pending' as const
+      }));
+
+    if (newReviewItems.length === 0) {
+      alert('No se detectaron productos adicionales distintos o ya estaban todos en la lista.');
+      return;
+    }
+
+    setTicketSession({
+      ...ticketSession,
+      items: [...ticketSession.items, ...newReviewItems]
+    });
+    confetti({ particleCount: 35, spread: 60 });
+  };
+
   const handleLoadDemoTicket = () => {
     const demo = `MERCADONA S.A.
 1 HUEVOS CAMPEROS L 12U 2.45
@@ -653,45 +688,66 @@ TOTAL 15.55 €`;
     handleTicketRawTextLoaded(demo, null);
   };
 
-  const handleProcessTicketFile = async (file: File) => {
+  const handleProcessTicketFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
     setIsProcessingFile(true);
     try {
-      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        const pdfText = await extractTextFromPdf(file);
-        if (pdfText.trim().length > 10) {
-          handleTicketRawTextLoaded(pdfText, null);
+      let combinedText = '';
+      let firstPreview: string | null = null;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const pdfText = await extractTextFromPdf(file);
+          if (pdfText.trim()) {
+            combinedText += (combinedText ? '\n' : '') + pdfText;
+          }
         } else {
-          handleLoadDemoTicket();
-        }
-      } else {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const previewUrl = reader.result as string;
-          const demo = `MERCADONA S.A.
+          const previewUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          if (!firstPreview) {
+            firstPreview = previewUrl;
+          }
+          // Si el usuario sube varias fotos/capturas, generamos las partes correspondientes
+          const mockChunk = i === 0 ? `MERCADONA S.A.
 1 HUEVOS CAMPEROS L 12U 2.45
 2 LECHE ENTERA 1L 1.95
 1 PLATANO DE CANARIAS 1.80
-1 PECHUGA POLLO FILETES 4.50
-1 TOMATE FRITO BRICK 0.85
+1 PECHUGA POLLO FILETES 4.50` : `1 TOMATE FRITO BRICK 0.85
 1 PASTA MACARRONES 500G 0.90
 1 PAPEL HIGIENICO 12R 3.10
 TOTAL 15.55 €`;
-          handleTicketRawTextLoaded(demo, previewUrl);
-        };
-        reader.readAsDataURL(file);
+          combinedText += (combinedText ? '\n' : '') + mockChunk;
+        }
+      }
+
+      if (ticketSession) {
+        appendTicketSessionItems(combinedText, ticketSession.supermarket);
+      } else if (combinedText.trim().length > 5) {
+        handleTicketRawTextLoaded(combinedText, firstPreview);
+      } else {
+        handleLoadDemoTicket();
       }
     } catch (err) {
-      console.error('Error processing ticket file:', err);
-      alert('Hubo un problema al leer el archivo. Inténtalo de nuevo.');
+      console.error('Error processing ticket files:', err);
+      alert('Hubo un problema al leer los archivos. Inténtalo de nuevo.');
     } finally {
       setIsProcessingFile(false);
     }
   };
 
+  const handleProcessTicketFile = async (file: File) => {
+    await handleProcessTicketFiles([file]);
+  };
+
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await handleProcessTicketFile(file);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      await handleProcessTicketFiles(Array.from(files));
+      e.target.value = '';
     }
   };
 
