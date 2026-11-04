@@ -50,14 +50,18 @@ CREATE TABLE IF NOT EXISTS food_proposals (
 
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON food_proposals(status);
 
--- 4. Nevera / Despensa de cada usuario (Privada)
+-- 4. Nevera / Despensa de cada usuario (con soporte para Frigo Compartido y Bóveda Privada)
 CREATE TABLE IF NOT EXISTS pantry_items (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
+    household_id TEXT,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
     quantity REAL NOT NULL,
     unit TEXT NOT NULL,
+    location TEXT DEFAULT 'nevera', -- 'nevera', 'congelador', 'despensa'
+    is_vault INTEGER DEFAULT 0, -- 1 si está en la bóveda privada (oculto a compañeros)
+    owner_name TEXT,
     price REAL,
     price_per_kg REAL,
     package_weight_grams REAL,

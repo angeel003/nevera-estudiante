@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-import { Plus, Minus, Trash2, Edit2, Snowflake, UtensilsCrossed, Clock, Activity, ChevronDown, ChevronUp, Refrigerator } from 'lucide-react';
+import {
+  Plus,
+  Minus,
+  Trash2,
+  Edit2,
+  Snowflake,
+  UtensilsCrossed,
+  Clock,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Refrigerator,
+  Lock,
+  Users,
+  Home
+} from 'lucide-react';
 import type { PantryItem, Category } from '../types';
 import { CATEGORIES, getDaysRemaining, getOffsetDate } from '../utils/constants';
 import { guessCategory, guessUnit, getDefaultExpiryDate } from '../mockData';
@@ -12,6 +27,10 @@ interface PantryTabProps {
   onUpdateQuantity: (id: string, delta: number) => void;
   onRemoveItem: (id: string) => void;
   onEditItem: (item: PantryItem) => void;
+  currentUserId?: string;
+  householdName?: string;
+  householdMembersCount?: number;
+  onOpenShareFridge?: () => void;
 }
 
 export const PantryTab: React.FC<PantryTabProps> = ({
@@ -22,6 +41,10 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   onUpdateQuantity,
   onRemoveItem,
   onEditItem,
+  currentUserId,
+  householdName = 'Mi Frigorífico',
+  householdMembersCount = 1,
+  onOpenShareFridge
 }) => {
   const [name, setName] = useState('');
   const [qty, setQty] = useState(1);
@@ -30,6 +53,8 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   const [price, setPrice] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
   const [expiry, setExpiry] = useState('');
+  const [location, setLocation] = useState<'nevera' | 'congelador' | 'despensa'>('nevera');
+  const [isVault, setIsVault] = useState(false);
   const [isFrozen, setIsFrozen] = useState(false);
   const [isPrepared, setIsPrepared] = useState(false);
   const [calories, setCalories] = useState('');
@@ -38,6 +63,10 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   const [fat, setFat] = useState('');
   const [notes, setNotes] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Filtros superiores de Frigo Compartido vs Bóveda Privada
+  const [vaultView, setVaultView] = useState<'shared' | 'vault'>('shared');
+  const [locationFilter, setLocationFilter] = useState<'todos' | 'nevera' | 'congelador' | 'despensa'>('todos');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +78,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     if (isPrepared && cat === 'otros') cat = 'comida-preparada';
     if (isFrozen && cat === 'otros') cat = 'congelados';
 
-    const expiryDate = expiry || (isFrozen ? getOffsetDate(90) : getDefaultExpiryDate(name));
+    const expiryDate = expiry || (location === 'congelador' || isFrozen ? getOffsetDate(90) : getDefaultExpiryDate(name));
 
     const cals = calories ? parseFloat(calories) : undefined;
     const prot = protein ? parseFloat(protein) : undefined;
@@ -57,6 +86,8 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     const ft = fat ? parseFloat(fat) : undefined;
 
     const hasNutrition = cals !== undefined || prot !== undefined || crb !== undefined || ft !== undefined;
+
+    const actualFrozen = isFrozen || location === 'congelador' || cat === 'congelados';
 
     const newItem: PantryItem = {
       id: 'pantry_' + Date.now(),
@@ -67,11 +98,14 @@ export const PantryTab: React.FC<PantryTabProps> = ({
       price: isNaN(parsedPrice || 0) ? undefined : parsedPrice,
       pricePerKg: isNaN(parsedKg || 0) ? undefined : parsedKg,
       expiryDate,
-      isFrozen: isFrozen || cat === 'congelados',
+      isFrozen: actualFrozen,
       isPreparedMeal: isPrepared || cat === 'comida-preparada',
       servings: isPrepared ? Number(qty) || 1 : undefined,
       notes: notes.trim() || undefined,
       nutrition: hasNutrition ? { calories: cals, protein: prot, carbs: crb, fat: ft } : undefined,
+      isVault: isVault,
+      ownerId: currentUserId || 'usr_guest',
+      location: location,
       addedAt: new Date().toISOString(),
     };
 
@@ -83,6 +117,8 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     setPrice('');
     setPricePerKg('');
     setExpiry('');
+    setLocation('nevera');
+    setIsVault(false);
     setIsFrozen(false);
     setIsPrepared(false);
     setCalories('');
@@ -93,8 +129,26 @@ export const PantryTab: React.FC<PantryTabProps> = ({
     setShowAdvanced(false);
   };
 
+  const vaultItemsCount = pantry.filter(item => item.isVault === true).length;
+  const sharedItemsCount = pantry.filter(item => !item.isVault).length;
+
   const filteredPantry = pantry
-    .filter(item => filter === 'todos' || item.category === filter)
+    .filter(item => {
+      // 1. Filtro de Bóveda vs Compartido
+      if (vaultView === 'shared' && item.isVault === true) return false;
+      if (vaultView === 'vault' && item.isVault !== true) return false;
+
+      // 2. Filtro de Ubicación (nevera, congelador, despensa)
+      if (locationFilter !== 'todos') {
+        const itemLoc = item.location || (item.isFrozen || item.category === 'congelados' ? 'congelador' : item.category === 'despensa' ? 'despensa' : 'nevera');
+        if (itemLoc !== locationFilter) return false;
+      }
+
+      // 3. Filtro de Categoría
+      if (filter !== 'todos' && item.category !== filter) return false;
+
+      return true;
+    })
     .sort((a, b) => {
       const daysA = getDaysRemaining(a.expiryDate) ?? 999;
       const daysB = getDaysRemaining(b.expiryDate) ?? 999;
@@ -103,6 +157,120 @@ export const PantryTab: React.FC<PantryTabProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Barra superior de Modo: Frigo Compartido vs Mi Bóveda (Vault) */}
+      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setVaultView('shared')}
+            className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
+              vaultView === 'shared'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Home className="w-3.5 h-3.5" />
+            <span>Frigo Compartido</span>
+            <span className="text-[10px] bg-white/25 px-1.5 py-0.2 rounded-full font-black ml-0.5">
+              {sharedItemsCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setVaultView('vault')}
+            className={`flex-1 sm:flex-none px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
+              vaultView === 'vault'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Lock className="w-3.5 h-3.5 text-amber-300" />
+            <span>Mi Bóveda (Vault)</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5 ${vaultView === 'vault' ? 'bg-white/25' : 'bg-purple-100 text-purple-800'}`}>
+              {vaultItemsCount}
+            </span>
+          </button>
+        </div>
+
+        {onOpenShareFridge && (
+          <button
+            type="button"
+            onClick={onOpenShareFridge}
+            className="text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+          >
+            <Users className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{householdName} ({householdMembersCount} {householdMembersCount === 1 ? 'persona' : 'personas'})</span>
+          </button>
+        )}
+      </div>
+
+      {/* Subfiltros por Ubicación Física: Nevera / Congelador / Despensa */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+        <button
+          type="button"
+          onClick={() => setLocationFilter('todos')}
+          className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1 border ${
+            locationFilter === 'todos'
+              ? 'bg-slate-800 text-white border-slate-800 shadow-2xs'
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>Todos los sitios</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocationFilter('nevera')}
+          className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1 border ${
+            locationFilter === 'nevera'
+              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>❄️ Nevera</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocationFilter('congelador')}
+          className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1 border ${
+            locationFilter === 'congelador'
+              ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>🧊 Congelador</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocationFilter('despensa')}
+          className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1 border ${
+            locationFilter === 'despensa'
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>🥫 Despensa</span>
+        </button>
+      </div>
+
+      {/* Mensaje descriptivo si está en la Bóveda */}
+      {vaultView === 'vault' && (
+        <div className="bg-purple-950 text-purple-100 p-3 rounded-2xl border border-purple-800 text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-300 shrink-0" />
+            <span>
+              <strong>Bóveda Privada activa:</strong> Alimentos ocultos que solo tú puedes ver. Tus compañeros de frigo no pueden verlos.
+            </span>
+          </div>
+          <button
+            onClick={() => setVaultView('shared')}
+            className="text-[11px] underline font-bold text-amber-300 shrink-0"
+          >
+            Volver a Compartido
+          </button>
+        </div>
+      )}
+
       {/* Quick Add Form */}
       <form onSubmit={handleSubmit} className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200 space-y-2.5">
         <div className="flex justify-between items-center">
@@ -226,38 +394,70 @@ export const PantryTab: React.FC<PantryTabProps> = ({
           </div>
         </div>
 
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            onClick={() => setIsFrozen(!isFrozen)}
-            className={`text-xs px-2.5 py-1 rounded-xl flex items-center gap-1 font-medium transition ${
-              isFrozen
-                ? 'bg-sky-100 text-sky-800 border border-sky-300'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Snowflake className="w-3.5 h-3.5" />
-            <span>{isFrozen ? '❄️ En Congelador' : '¿Está congelado?'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !isPrepared;
-              setIsPrepared(next);
-              if (next) {
-                setCategory('comida-preparada');
-                if (unit === 'uds') setUnit('tupper');
-              }
-            }}
-            className={`text-xs px-2.5 py-1 rounded-xl flex items-center gap-1 font-medium transition ${
-              isPrepared
-                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <UtensilsCrossed className="w-3.5 h-3.5" />
-            <span>{isPrepared ? '🍱 Comida lista / Tupper' : '¿Comida ya hecha?'}</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">GUARDAR EN:</span>
+            <button
+              type="button"
+              onClick={() => { setLocation('nevera'); setIsFrozen(false); }}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+                location === 'nevera' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              ❄️ Nevera
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLocation('congelador'); setIsFrozen(true); }}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+                location === 'congelador' ? 'bg-sky-100 text-sky-800 border border-sky-300 font-bold' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              🧊 Congelador
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLocation('despensa'); setIsFrozen(false); }}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+                location === 'despensa' ? 'bg-amber-100 text-amber-800 border border-amber-300 font-bold' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              🥫 Despensa
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isPrepared;
+                setIsPrepared(next);
+                if (next) {
+                  setCategory('comida-preparada');
+                  if (unit === 'uds') setUnit('tupper');
+                }
+              }}
+              className={`text-xs px-2 py-1 rounded-xl flex items-center gap-1 font-medium transition ${
+                isPrepared
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5" />
+              <span>{isPrepared ? '🍱 Tupper' : '¿Tupper?'}</span>
+            </button>
+
+            <label className="flex items-center gap-1.5 cursor-pointer bg-slate-900 text-white px-2.5 py-1 rounded-xl text-xs font-bold shadow-2xs hover:bg-slate-800 transition">
+              <input
+                type="checkbox"
+                checked={isVault}
+                onChange={e => setIsVault(e.target.checked)}
+                className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-0 cursor-pointer"
+              />
+              <Lock className={`w-3.5 h-3.5 ${isVault ? 'text-amber-400' : 'text-slate-400'}`} />
+              <span>{isVault ? '🔒 En Bóveda' : 'Hacer Privado (Vault)'}</span>
+            </label>
+          </div>
         </div>
 
         {showAdvanced && (
@@ -390,16 +590,41 @@ export const PantryTab: React.FC<PantryTabProps> = ({
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-slate-800 text-sm">{item.name}</h3>
-                      {item.isFrozen && (
-                        <span className="text-[10px] font-semibold bg-sky-100 text-sky-700 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
-                          <Snowflake className="w-2.5 h-2.5" /> Congelado
+
+                      {/* Insignia de Bóveda Privada */}
+                      {item.isVault && (
+                        <span className="text-[10px] font-bold bg-purple-100 text-purple-900 border border-purple-200 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5 text-purple-700" /> Bóveda Privada
                         </span>
                       )}
+
+                      {/* Insignia de Ubicación (Nevera / Congelador / Despensa) */}
+                      {item.location === 'congelador' || item.isFrozen || item.category === 'congelados' ? (
+                        <span className="text-[10px] font-semibold bg-sky-100 text-sky-700 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                          <Snowflake className="w-2.5 h-2.5" /> Congelador
+                        </span>
+                      ) : item.location === 'despensa' || item.category === 'despensa' ? (
+                        <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                          🥫 Despensa
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                          ❄️ Nevera
+                        </span>
+                      )}
+
                       {item.isPreparedMeal && (
                         <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
                           <UtensilsCrossed className="w-2.5 h-2.5" /> Tupper / Plato
                         </span>
                       )}
+
+                      {item.ownerName && !item.isVault && householdMembersCount > 1 && (
+                        <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded-md">
+                          👤 {item.ownerName}
+                        </span>
+                      )}
+
                       {item.price && (
                         <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                           {item.price.toFixed(2)}€

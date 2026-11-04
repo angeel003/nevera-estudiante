@@ -8,7 +8,9 @@ import type {
   TicketReviewItem,
   TicketSession,
   ProposedFoodItem,
-  OptimizedBasketPlan
+  OptimizedBasketPlan,
+  HouseholdInfo,
+  UserAccount
 } from './types';
 import {
   STORAGE_KEY_PANTRY,
@@ -18,6 +20,7 @@ import {
   STORAGE_KEY_ADMIN_PROPOSALS,
   STORAGE_KEY_USER_ID,
   STORAGE_KEY_USER_EMAIL,
+  STORAGE_KEY_HOUSEHOLD,
   ADMIN_EMAILS,
   getDaysRemaining
 } from './utils/constants';
@@ -40,7 +43,7 @@ import { SupermarketPromptModal } from './components/SupermarketPromptModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { ShoppingOptimizerModal } from './components/ShoppingOptimizerModal';
 import { AuthModal } from './components/AuthModal';
-import type { UserAccount } from './types';
+import { ShareFridgeModal } from './components/ShareFridgeModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'frigo' | 'compra' | 'recetas' | 'ticket'>('frigo');
@@ -56,6 +59,7 @@ export default function App() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showOptimizerModal, setShowOptimizerModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShareFridgeModal, setShowShareFridgeModal] = useState(false);
   const [optimizerIngredients, setOptimizerIngredients] = useState<{ name: string; quantity: number; unit: string }[]>([]);
   const [optimizerRecipeSource, setOptimizerRecipeSource] = useState<Recipe | undefined>(undefined);
 
@@ -74,6 +78,88 @@ export default function App() {
 
   const userId = currentUser?.id || 'usr_guest';
   const isAdmin = currentUser?.isAdmin || false;
+
+  // Frigo Compartido & Hogar (Piso de estudiantes / Pareja)
+  const [household, setHousehold] = useState<HouseholdInfo>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_HOUSEHOLD);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) { /* ignore */ }
+    }
+    const randomCode = 'FRIGO-' + Math.floor(1000 + Math.random() * 9000);
+    return {
+      id: 'house_' + Date.now(),
+      name: 'Mi Frigorífico',
+      inviteCode: randomCode,
+      members: [
+        {
+          id: userId,
+          name: currentUser?.name || 'Yo',
+          email: currentUser?.email || 'angelhv2003@gmail.com',
+          joinedAt: new Date().toISOString(),
+          isOwner: true,
+        },
+      ],
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_HOUSEHOLD, JSON.stringify(household));
+  }, [household]);
+
+  const handleJoinHousehold = async (code: string): Promise<{ success: boolean; message: string }> => {
+    if (!code || !code.startsWith('FRIGO-')) {
+      return { success: false, message: 'El código debe tener el formato FRIGO-XXXX' };
+    }
+    const myMember = {
+      id: userId,
+      name: currentUser?.name || 'Compañero',
+      email: currentUser?.email || 'companero@myfridge.local',
+      joinedAt: new Date().toISOString(),
+      isOwner: false,
+    };
+
+    const updated: HouseholdInfo = {
+      id: 'house_' + code,
+      name: 'Frigo Compartido (' + code + ')',
+      inviteCode: code,
+      members: [
+        {
+          id: 'user_host_' + code,
+          name: 'Compañero de Piso',
+          email: 'anfitrion@piso.es',
+          joinedAt: new Date().toISOString(),
+          isOwner: true,
+        },
+        myMember,
+      ],
+    };
+
+    setHousehold(updated);
+    return {
+      success: true,
+      message: `¡Te has conectado con éxito al frigo compartido con código ${code}! Ahora compartís los alimentos comunes de la nevera.`,
+    };
+  };
+
+  const handleLeaveHousehold = () => {
+    const newCode = 'FRIGO-' + Math.floor(1000 + Math.random() * 9000);
+    setHousehold({
+      id: 'house_' + Date.now(),
+      name: 'Mi Frigorífico Individual',
+      inviteCode: newCode,
+      members: [
+        {
+          id: userId,
+          name: currentUser?.name || 'Yo',
+          email: currentUser?.email || 'angelhv2003@gmail.com',
+          joinedAt: new Date().toISOString(),
+          isOwner: true,
+        },
+      ],
+    });
+  };
 
   // Admin proposed food items list (with duplicate suspicion detector)
   const [adminProposals, setAdminProposals] = useState<ProposedFoodItem[]>(() => {
@@ -804,6 +890,8 @@ TOTAL 15.55 €`;
         onOpenAdminPanel={isAdmin ? () => setShowAdminModal(true) : undefined}
         currentUser={currentUser}
         onOpenAuthModal={() => setShowAuthModal(true)}
+        onOpenShareFridge={() => setShowShareFridgeModal(true)}
+        householdName={household.name}
       />
 
       {/* Main Content View */}
@@ -817,6 +905,10 @@ TOTAL 15.55 €`;
             onUpdateQuantity={updatePantryQuantity}
             onRemoveItem={removePantryItem}
             onEditItem={setEditingPantryItem}
+            currentUserId={userId}
+            householdName={household.name}
+            householdMembersCount={household.members.length}
+            onOpenShareFridge={() => setShowShareFridgeModal(true)}
           />
         )}
 
@@ -948,6 +1040,19 @@ TOTAL 15.55 €`;
             localStorage.removeItem(STORAGE_KEY_USER_ID);
           }}
           onClose={() => setShowAuthModal(false)}
+        />
+      )}
+
+      {/* Share Fridge Modal (Piso Compartido / Pareja / Vault) */}
+      {showShareFridgeModal && (
+        <ShareFridgeModal
+          currentUser={currentUser}
+          household={household}
+          onUpdateHousehold={setHousehold}
+          onJoinHousehold={handleJoinHousehold}
+          onLeaveHousehold={handleLeaveHousehold}
+          onClose={() => setShowShareFridgeModal(false)}
+          onOpenAuth={() => setShowAuthModal(true)}
         />
       )}
     </div>

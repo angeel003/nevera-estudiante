@@ -31,6 +31,26 @@ export interface PantryItem {
   servings?: number; // raciones disponibles si es comida preparada
   notes?: string; // observaciones o notas de preparación
   nutrition?: NutritionInfo; // info nutricional opcional (kcal, proteínas, etc.)
+  // Opciones de Bóveda (Vault) y Frigo Compartido
+  isVault?: boolean; // true = privado en mi cajón/bóveda, false = compartido con compañeros
+  ownerId?: string; // id del usuario que lo añadió
+  ownerName?: string; // nombre del usuario que lo aportó
+  location?: 'nevera' | 'congelador' | 'despensa'; // ubicación física
+}
+
+export interface HouseholdMember {
+  id: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+  isOwner?: boolean;
+}
+
+export interface HouseholdInfo {
+  id: string;
+  name: string;
+  inviteCode: string;
+  members: HouseholdMember[];
 }
 
 export interface ShoppingItem {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck, User } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, User, Users } from 'lucide-react';
 import type { UserAccount } from '../types';
 
 interface HeaderProps {
@@ -11,6 +11,8 @@ interface HeaderProps {
   onOpenAdminPanel?: () => void;
   currentUser?: UserAccount | null;
   onOpenAuthModal?: () => void;
+  onOpenShareFridge?: () => void;
+  householdName?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +24,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminPanel,
   currentUser,
   onOpenAuthModal,
+  onOpenShareFridge,
+  householdName,
 }) => {
   return (
     <header className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 sticky top-0 z-20 shadow-md">
@@ -33,6 +37,17 @@ export const Header: React.FC<HeaderProps> = ({
           <p className="text-xs text-emerald-100">Control de frigo, compras y recetas</p>
         </div>
         <div className="flex items-center gap-2">
+          {onOpenShareFridge && (
+            <button
+              onClick={onOpenShareFridge}
+              title={`Frigo Compartido: ${householdName || 'Mi Piso'}`}
+              className="p-1.5 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition text-emerald-100 hover:text-white flex items-center gap-1.5 text-xs font-semibold"
+            >
+              <Users className="w-4 h-4 text-emerald-200" />
+              <span className="hidden sm:inline">Compartir</span>
+            </button>
+          )}
+
           {onOpenAuthModal && (
             <button
               onClick={onOpenAuthModal}
