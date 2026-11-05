@@ -50,6 +50,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setError(null);
     setLoading(true);
+    setResetCode('');
 
     try {
       const res = await fetch('/api/auth', {
@@ -60,21 +61,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const { ok, data } = await parseResponseJson(res);
       if (data && ok) {
         setSuccessMsg(data.message || 'Código enviado. Revisa tu correo.');
-        if (data.demoCode) setResetCode(data.demoCode);
         setView('reset-confirm');
         return;
       }
       if (data && !ok) throw new Error(data.error);
 
       // Modo offline / simulación
-      const demoCode = '123456';
-      setResetCode(demoCode);
-      setSuccessMsg(`Simulación: Tu código de recuperación es ${demoCode}`);
+      setSuccessMsg('Código generado. Introduce el código de 6 dígitos enviado.');
       setView('reset-confirm');
     } catch (err: any) {
-      const demoCode = '123456';
-      setResetCode(demoCode);
-      setSuccessMsg(`Simulación: Tu código de recuperación es ${demoCode}`);
+      setSuccessMsg('Introduce el código de verificación de 6 dígitos.');
       setView('reset-confirm');
     } finally {
       setLoading(false);

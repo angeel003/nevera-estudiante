@@ -1,5 +1,6 @@
 interface Env {
   DB: D1Database;
+  RESEND_API_KEY?: string;
 }
 
 // Genera un hash seguro mediante SHA-256 (Web Crypto API disponible en Cloudflare Workers)
@@ -43,6 +44,49 @@ async function ensureVerificationColumns(db: D1Database) {
   } catch (e) { /* Columna ya existente */ }
 }
 
+// Envía un correo electrónico real usando la API de Resend si está configurada la variable RESEND_API_KEY
+async function sendSecurityEmail(env: Env, toEmail: string, code: string, subject: string, title: string): Promise<boolean> {
+  if (!env.RESEND_API_KEY) {
+    return false;
+  }
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Nevera Estudiante <onboarding@resend.dev>',
+        to: [toEmail],
+        subject: subject,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <span style="font-size: 36px;">🧊</span>
+              <h2 style="color: #0f172a; margin: 8px 0 0; font-size: 20px;">Nevera Estudiante</h2>
+            </div>
+            <h3 style="color: #059669; font-size: 16px; margin-top: 0;">${title}</h3>
+            <p style="color: #475569; font-size: 14px; line-height: 1.5;">
+              Usa el siguiente código de seguridad de 6 dígitos para verificar tu cuenta en la aplicación:
+            </p>
+            <div style="background-color: #f8fafc; border: 2px dashed #059669; border-radius: 12px; padding: 16px; text-align: center; font-size: 28px; font-weight: 800; letter-spacing: 6px; color: #0f172a; margin: 20px 0;">
+              ${code}
+            </div>
+            <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">
+              Este código caducará en 15 minutos. Si tú no has solicitado este código, puedes ignorar este mensaje con total seguridad.
+            </p>
+          </div>
+        `,
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Error enviando correo via Resend API:', err);
+    return false;
+  }
+}
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
@@ -76,11 +120,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         .bind(resetOtp, expiresAt, user.id)
         .run();
 
+      const emailSent = await sendSecurityEmail(
+        env,
+        cleanEmail,
+        resetOtp,
+        'Código de recuperación de contraseña - Nevera Estudiante',
+        'Recuperación de contraseña'
+      );
+
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Hemos enviado el código de verificación a ${cleanEmail}. (Para pruebas tu código es: ${resetOtp})`,
-          demoCode: resetOtp,
+          message: emailSent
+            ? `Hemos enviado un correo a ${cleanEmail} con tu código de recuperación.`
+            : `Código generado. (Para recibir emails reales en tu bandeja de entrada configura RESEND_API_KEY en Cloudflare. Modo pruebas: ${resetOtp})`,
+          demoCode: emailSent ? undefined : resetOtp,
         }),
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -193,11 +247,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         .bind(newOtp, expiresAt, newOtp, expiresAt, user.id)
         .run();
 
+      const emailSent = await sendSecurityEmail(
+        env,
+        cleanEmail,
+        newOtp,
+        'Código de verificación - Nevera Estudiante',
+        'Verificación de correo'
+      );
+
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Código reenviado a ${cleanEmail}. (Para pruebas tu código es: ${newOtp})`,
-          demoCode: newOtp,
+          message: emailSent
+            ? `Hemos reenviado un nuevo código a ${cleanEmail}.`
+            : `Código generado. (Para pruebas tu código es: ${newOtp})`,
+          demoCode: emailSent ? undefined : newOtp,
         }),
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -273,7 +337,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         if (existingAdmin) {
           return new Response(JSON.stringify({ error: 'La cuenta de administrador ya está creada. Inicia sesión.' }), { status: 409 });
         }
-        // Si no existe, solo el dueño puede registrarlo (opcionalmente con clave)
       }
 
       const existingUser = await env.DB.prepare('SELECT id, email_verified FROM users WHERE email = ?')
@@ -299,13 +362,23 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           .bind(passwordHash, salt, name || cleanEmail.split('@')[0], otp, expiresAt, otp, expiresAt, existingUser.id)
           .run();
 
+        const emailSent = await sendSecurityEmail(
+          env,
+          cleanEmail,
+          otp,
+          'Verifica tu correo - Nevera Estudiante',
+          'Activación de tu cuenta'
+        );
+
         return new Response(
           JSON.stringify({
             success: true,
             needsVerification: true,
             email: cleanEmail,
-            message: `Hemos enviado un código de 6 dígitos a ${cleanEmail} para verificar que es tu correo.`,
-            demoCode: otp,
+            message: emailSent
+              ? `Hemos enviado un código de 6 dígitos a ${cleanEmail} para verificar que es tu correo.`
+              : `Código generado. (Configura RESEND_API_KEY para correos reales. Modo pruebas: ${otp})`,
+            demoCode: emailSent ? undefined : otp,
           }),
           { headers: { 'Content-Type': 'application/json' } }
         );
@@ -332,13 +405,23 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         )
         .run();
 
+      const emailSent = await sendSecurityEmail(
+        env,
+        cleanEmail,
+        otp,
+        'Verifica tu correo - Nevera Estudiante',
+        'Activación de tu cuenta'
+      );
+
       return new Response(
         JSON.stringify({
           success: true,
           needsVerification: true,
           email: cleanEmail,
-          message: `Hemos enviado un código de 6 dígitos a ${cleanEmail} para verificar que es tu correo.`,
-          demoCode: otp,
+          message: emailSent
+            ? `Hemos enviado un código de 6 dígitos a ${cleanEmail} para verificar que es tu correo.`
+            : `Código generado. (Configura RESEND_API_KEY en Cloudflare para correos reales. Modo pruebas: ${otp})`,
+          demoCode: emailSent ? undefined : otp,
         }),
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -376,12 +459,20 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           .bind(otp, expiresAt, user.id)
           .run();
 
+        const emailSent = await sendSecurityEmail(
+          env,
+          cleanEmail,
+          otp,
+          'Verifica tu correo - Nevera Estudiante',
+          'Activación de tu cuenta'
+        );
+
         return new Response(
           JSON.stringify({
             error: 'Debes verificar tu correo antes de poder acceder.',
             needsVerification: true,
             email: cleanEmail,
-            demoCode: otp,
+            demoCode: emailSent ? undefined : otp,
           }),
           { status: 403, headers: { 'Content-Type': 'application/json' } }
         );
